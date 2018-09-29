@@ -1,6 +1,7 @@
 # Docker-Ansible base image
 
 [![Layers](https://images.microbadger.com/badges/image/pad92/ansible-alpine.svg)](https://microbadger.com/images/pad92/ansible-alpine) [![GitHub issues](https://img.shields.io/github/issues/pad92/docker-ansible-alpine.svg)](https://github.com/pad92/docker-ansible-alpine) [![Docker Automated build](https://img.shields.io/docker/automated/pad92/ansible-alpine.svg?maxAge=2592000)](https://hub.docker.com/r/pad92/ansible-alpine/) [![Docker Build Status](https://img.shields.io/docker/build/pad92/ansible-alpine.svg?maxAge=2592000)](https://hub.docker.com/r/pad92/ansible-alpine/) [![Docker Pulls](https://img.shields.io/docker/pulls/pad92/ansible-alpine.svg)](https://hub.docker.com/r/pad92/ansible-alpine/)
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fpad92%2Fdocker-ansible-alpine.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fpad92%2Fdocker-ansible-alpine?ref=badge_shield)
 
 ## Usage
 
@@ -47,3 +48,7 @@ docker run -it --rm \
   sh
 ```
 
+
+
+## License
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fpad92%2Fdocker-ansible-alpine.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fpad92%2Fdocker-ansible-alpine?ref=badge_large)
