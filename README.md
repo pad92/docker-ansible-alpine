@@ -1,3 +1,6 @@
+> [!WARNING]  
+> moved to https://github.com/Cloud-Temple/docker-ansible-alpine
+
 # Docker-Ansible base image
 
 ![Pipeline](https://gitlab.com/pad92/docker-ansible-alpine/badges/master/pipeline.svg)
