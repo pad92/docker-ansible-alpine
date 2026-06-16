@@ -3,6 +3,10 @@ image: docker:git
 services:
 - docker:dind
 
+default:
+  tags:
+    - chataigne
+
 variables:
   ALPINE_VERSION: "3.20"
   ANSIBLE_VERSION: "11.13.0"
