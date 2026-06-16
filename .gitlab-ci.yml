@@ -12,6 +12,7 @@ variables:
   ANSIBLE_VERSION: "11.13.0"
   ANSIBLE_LINT_VERSION: "25.12.0"
   MITOGEN_VERSION: "0.3.49"
+  DOCKER_AUTH_CONFIG: ""
 
 stages:
 - build_image
