@@ -53,4 +53,20 @@ if [ -f "$ANSIBLE_REQUIREMENTS" ]; then
     ansible-galaxy install $ANSIBLE_GALAXY_PARAM -r $ANSIBLE_REQUIREMENTS
 fi
 
+# upgrade ca-certificates package
+if [ "x${CA_CERT_UPGRADE}" = "xtrue" ]; then
+    apk add --upgrade --no-cache ca-certificates
+fi
+
+# export REQUESTS_CA_BUNDLE
+if [ -z "${REQUESTS_CA_BUNDLE}" ]; then
+    REQUESTS_CA_BUNDLE='/etc/ssl/certs/ca-certificates.crt'
+fi
+export REQUESTS_CA_BUNDLE="${REQUESTS_CA_BUNDLE}"
+
+# update ca-certs
+if [ "$(find /usr/local/share/ca-certificates/ -type f -name '*.crt' 2>/dev/null | wc -l)" -gt "0" ]; then
+    update-ca-certificates
+fi
+
 exec "$@"

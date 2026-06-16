@@ -17,6 +17,7 @@
 | PIP_REQUIREMENTS     | requirements.txt | install python library requirements         |
 | ANSIBLE_REQUIREMENTS | requirements.yml | install ansible galaxy roles requirements   |
 | DEPLOY_KEY           |                  | pass an SSH private key to use in container |
+| CA_CERT_UPGRADE      |                  | set to `true` to update ca-certificates package |
 
 ### Mitogen
 
@@ -67,6 +68,18 @@ docker run -it --rm \
   pad92/ansible-alpine:latest \
   sh
 ```
+
+### Add custom CA certificates
+
+```sh
+docker run -it --rm \
+  -v $(readlink -f $SSH_AUTH_SOCK):/ssh-agent \
+  -v ${PWD}:/ansible \
+  -v ${PWD}/ca-certificates:/usr/local/share/ca-certificates \
+  -e SSH_AUTH_SOCK=/ssh-agent \
+  pad92/ansible-alpine:latest sh
+```
+
 
 ## Local Development and Testing
 

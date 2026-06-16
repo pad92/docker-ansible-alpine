@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [13.7.0] - 2026-06-16
 
+### Added
+- Added custom CA certificates support via volume mounting to `/usr/local/share/ca-certificates/` and automatic execution of `update-ca-certificates` in entrypoint.
+- Added `CA_CERT_UPGRADE` environment variable option to force upgrade of `ca-certificates` package inside the container.
+
 ### Changed
 - Upgraded base image **Alpine** to `3.24`.
 - Upgraded **Ansible** to `13.7.0` (required for Python 3.14 compatibility on Alpine 3.24).
