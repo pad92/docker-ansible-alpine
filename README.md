@@ -17,11 +17,11 @@
 
 ### Mitogen
 
-To enable mitogen, add this configuration into defaults in ansible.cfg file
+To enable mitogen, add this configuration into defaults in ansible.cfg file (adjust the Python version path if using a custom Alpine base):
 
 ```cfg
 [defaults]
-strategy_plugins = /usr/lib/python3.11/site-packages/ansible_mitogen/plugins/strategy
+strategy_plugins = /usr/lib/python3.12/site-packages/ansible_mitogen/plugins/strategy
 strategy = mitogen_linear
 ```
 
@@ -48,9 +48,12 @@ docker run -it --rm \
 ### Lint Role
 
 ```sh
-docker run -it --rm pad92/ansible-alpine:latest \
-  -v ${PWD}:/ansible ansible-playbook tests/playbook.yml --syntax-check
+docker run -it --rm \
+  -v ${PWD}:/ansible \
+  pad92/ansible-alpine:latest \
+  ansible-lint tests/playbook.yml
 ```
+
 ### Run with forwarding ssh agent
 
 ```sh

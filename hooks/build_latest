@@ -3,11 +3,14 @@
 docker buildx build \
   --pull \
   --provenance=false \
-  --build-arg ANSIBLE_VERSION=${ANSIBLE_VERSION:=9.0.1} \
-  --build-arg ANSIBLE_LINT_VERSION=${ANSIBLE_LINT_VERSION:=6.22.0} \
+  --build-arg ALPINE_VERSION=${ALPINE_VERSION:=3.20} \
+  --build-arg ANSIBLE_VERSION=${ANSIBLE_VERSION:=11.13.0} \
+  --build-arg ANSIBLE_LINT_VERSION=${ANSIBLE_LINT_VERSION:=25.12.0} \
+  --build-arg MITOGEN_VERSION=${MITOGEN_VERSION:=0.3.49} \
   --build-arg BUILD_NAME="${CI_PROJECT_NAME}" \
   --build-arg BUILD_DATE="$(date '+%FT%T.%s%z')" \
   --build-arg BUILD_VCSREF="${CI_COMMIT_SHA:0:8}" \
-  --platform=linux/arm64,linux/amd64,linux/arm/v7 \
+  --platform=linux/arm64,linux/amd64 \
   -t "${IMAGE_NAME:=pad92/ansible-alpine}:${ANSIBLE_VERSION}" \
   .
+

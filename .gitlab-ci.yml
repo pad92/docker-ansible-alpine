@@ -3,8 +3,15 @@ image: docker:git
 services:
 - docker:dind
 
+variables:
+  ALPINE_VERSION: "3.20"
+  ANSIBLE_VERSION: "11.13.0"
+  ANSIBLE_LINT_VERSION: "25.12.0"
+  MITOGEN_VERSION: "0.3.49"
+
 stages:
 - build_image
+- test
 
 before_script:
   - mkdir -p ${HOME}/.docker
@@ -18,11 +25,14 @@ build_image.default:
   - docker buildx build
     --provenance=false
     --pull
+    --push
+    --build-arg ALPINE_VERSION="${ALPINE_VERSION}"
+    --build-arg ANSIBLE_VERSION="${ANSIBLE_VERSION}"
+    --build-arg ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}"
+    --build-arg MITOGEN_VERSION="${MITOGEN_VERSION}"
     --build-arg BUILD_NAME="${CI_PROJECT_NAME}"
     --build-arg BUILD_DATE="$(date '+%FT%T.%s%z')"
     --build-arg BUILD_VCSREF="${CI_COMMIT_SHA:0:8}"
-    --build-arg ANSIBLE_VERSION="${ANSIBLE_VERSION}"
-    --build-arg ANSIBLE_LINT_VERSION=${ANSIBLE_LINT_VERSION}
     --platform=linux/amd64
     -t "${CI_REGISTRY_IMAGE}:${ANSIBLE_VERSION}"
     .
@@ -38,11 +48,14 @@ build_image.feature:
   - docker buildx build
     --provenance=false
     --pull
+    --push
+    --build-arg ALPINE_VERSION="${ALPINE_VERSION}"
+    --build-arg ANSIBLE_VERSION="${ANSIBLE_VERSION}"
+    --build-arg ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}"
+    --build-arg MITOGEN_VERSION="${MITOGEN_VERSION}"
     --build-arg BUILD_NAME="${CI_PROJECT_NAME}"
     --build-arg BUILD_DATE="$(date '+%FT%T.%s%z')"
     --build-arg BUILD_VCSREF="${CI_COMMIT_SHA:0:8}"
-    --build-arg ANSIBLE_VERSION="${ANSIBLE_VERSION}"
-    --build-arg ANSIBLE_LINT_VERSION=${ANSIBLE_LINT_VERSION}
     --platform=linux/amd64
     -t "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME%%-*}"
     .
@@ -58,11 +71,14 @@ build_image.nonstd:
   - docker buildx build
     --provenance=false
     --pull
+    --push
+    --build-arg ALPINE_VERSION="${ALPINE_VERSION}"
+    --build-arg ANSIBLE_VERSION="${ANSIBLE_VERSION}"
+    --build-arg ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}"
+    --build-arg MITOGEN_VERSION="${MITOGEN_VERSION}"
     --build-arg BUILD_NAME="${CI_PROJECT_NAME}"
     --build-arg BUILD_DATE="$(date '+%FT%T.%s%z')"
     --build-arg BUILD_VCSREF="${CI_COMMIT_SHA:0:8}"
-    --build-arg ANSIBLE_VERSION="${ANSIBLE_VERSION}"
-    --build-arg ANSIBLE_LINT_VERSION=${ANSIBLE_LINT_VERSION}
     --platform=linux/amd64
     -t "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME:0:128}"
     .
@@ -80,12 +96,14 @@ build_image.tag:
   - docker buildx build
     --provenance=false
     --pull
+    --build-arg ALPINE_VERSION="${ALPINE_VERSION}"
+    --build-arg ANSIBLE_VERSION="${CI_COMMIT_REF_NAME}"
+    --build-arg ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}"
+    --build-arg MITOGEN_VERSION="${MITOGEN_VERSION}"
     --build-arg BUILD_NAME="${CI_PROJECT_NAME}"
     --build-arg BUILD_DATE="$(date '+%FT%T.%s%z')"
     --build-arg BUILD_VCSREF="${CI_COMMIT_SHA:0:8}"
-    --build-arg ANSIBLE_VERSION="${CI_COMMIT_REF_NAME}"
-    --build-arg ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}"
-    --platform=linux/arm64,linux/amd64,linux/arm/v7
+    --platform=linux/arm64,linux/amd64
     --push
     -t "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME}"
     -t "${DU_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME}"
@@ -94,3 +112,57 @@ build_image.tag:
     .
   only:
   - tags
+
+test_image.default:
+  stage: test
+  image: "${CI_REGISTRY_IMAGE}:${ANSIBLE_VERSION}"
+  before_script: []
+  script:
+  - ansible --version
+  - ansible-lint --version
+  - python3 -c "import ansible_mitogen"
+  only:
+  - master
+  except:
+  - tags
+
+test_image.feature:
+  stage: test
+  image: "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME%%-*}"
+  before_script: []
+  script:
+  - ansible --version
+  - ansible-lint --version
+  - python3 -c "import ansible_mitogen"
+  only:
+  - "/^[0-9]+-.*$/"
+  except:
+  - tags
+
+test_image.nonstd:
+  stage: test
+  image: "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME:0:128}"
+  before_script: []
+  script:
+  - ansible --version
+  - ansible-lint --version
+  - python3 -c "import ansible_mitogen"
+  only:
+  - "/^[a-zA-Z]+.*$/"
+  except:
+  - master
+  - dev
+  - tags
+
+test_image.tag:
+  stage: test
+  image: "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME}"
+  before_script: []
+  script:
+  - ansible --version
+  - ansible-lint --version
+  - python3 -c "import ansible_mitogen"
+  only:
+  - tags
+
+
