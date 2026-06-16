@@ -8,10 +8,6 @@ default:
     - chataigne
 
 variables:
-  ALPINE_VERSION: "3.24"
-  ANSIBLE_VERSION: "13.7.0"
-  ANSIBLE_LINT_VERSION: "26.4.0"
-  MITOGEN_VERSION: "0.3.49"
   DOCKER_AUTH_CONFIG: ""
 
 stages:
@@ -29,14 +25,14 @@ before_script:
 build_image:
   stage: build
   script:
-    - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes || true
-    - docker buildx create --driver docker-container --use
     - |
+      . ./versions.env
+      docker run --rm --privileged multiarch/qemu-user-static --reset -p yes || true
+      docker buildx create --driver docker-container --use
       BUILD_ANSIBLE_VERSION="${ANSIBLE_VERSION}"
       if [ -n "${CI_COMMIT_TAG}" ]; then
         BUILD_ANSIBLE_VERSION="${CI_COMMIT_TAG}"
       fi
-    - |
       docker buildx build \
         --provenance=false \
         --pull \
@@ -115,10 +111,10 @@ release_tag:
 
 release_master:
   extends: .release_base
-  variables:
-    RELEASE_TAGS: "${ANSIBLE_VERSION}"
   script:
     - |
+      . ./versions.env
+      RELEASE_TAGS="${ANSIBLE_VERSION}"
       DOCKER_HUB_IMAGE="${DU_REGISTRY_IMAGE:-pad92/ansible-alpine}"
       TAGS=""
       for tag in ${RELEASE_TAGS}; do

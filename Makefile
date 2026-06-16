@@ -1,6 +1,9 @@
 # Docker Ansible Alpine - Build and Test Pipeline (Local Development)
 
-# Target variables with sensible defaults
+# Load centralized version variables
+-include versions.env
+
+# Target variables with sensible defaults (fallbacks if versions.env is missing)
 ALPINE_VERSION     ?= 3.24
 ANSIBLE_VERSION    ?= 13.7.0
 ANSIBLE_LINT_VERSION ?= 26.4.0
