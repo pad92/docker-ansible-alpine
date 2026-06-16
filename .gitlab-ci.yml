@@ -18,8 +18,6 @@ stages:
 - test
 
 before_script:
-  - mkdir -p ${HOME}/.docker
-  - echo ${DOCKER_AUTH_CONFIG} > ${HOME}/.docker/config.json
   - docker login -u "${CI_REGISTRY_USER}" -p "${CI_JOB_TOKEN}" "${CI_REGISTRY}"
   - |
     if [ -n "${DOCKER_HUB_PASSWORD}" ] && [ -n "${DOCKER_HUB_USER}" ]; then
