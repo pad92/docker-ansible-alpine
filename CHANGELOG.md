@@ -5,11 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [12.3.0] - 2026-06-16
+## [13.7.0] - 2026-06-16
 
 ### Changed
 - Upgraded base image **Alpine** to `3.24`.
-- Upgraded **Ansible** to `12.3.0`.
+- Upgraded **Ansible** to `13.7.0` (required for Python 3.14 compatibility on Alpine 3.24).
 - Upgraded **Ansible-Lint** to `26.4.0`.
 
 ---

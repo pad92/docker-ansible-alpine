@@ -24,7 +24,7 @@ To enable mitogen, add this configuration into defaults in ansible.cfg file (adj
 
 ```cfg
 [defaults]
-strategy_plugins = /usr/lib/python3.12/site-packages/ansible_mitogen/plugins/strategy
+strategy_plugins = /usr/lib/python3.14/site-packages/ansible_mitogen/plugins/strategy
 strategy = mitogen_linear
 ```
 

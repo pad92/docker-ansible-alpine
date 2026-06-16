@@ -2,12 +2,13 @@
 
 # Target variables with sensible defaults
 ALPINE_VERSION     ?= 3.24
-ANSIBLE_VERSION    ?= 12.3.0
+ANSIBLE_VERSION    ?= 13.7.0
 ANSIBLE_LINT_VERSION ?= 26.4.0
 MITOGEN_VERSION    ?= 0.3.49
 
 # Variables (fallbacks for local development)
 CI_PROJECT_NAME    ?= docker-ansible-alpine
+BUILDER_NAME       ?= $(CI_PROJECT_NAME)-builder
 CI_REGISTRY        ?= registry.gitlab.com
 CI_REGISTRY_IMAGE  ?= $(CI_REGISTRY)/pad92/$(CI_PROJECT_NAME)
 CI_COMMIT_SHA      ?= $(shell git rev-parse HEAD 2>/dev/null || echo "latest")
@@ -31,7 +32,10 @@ all: build test
 # Register QEMU handlers and configure Buildx builder
 setup-buildx:
 	docker run --rm --privileged multiarch/qemu-user-static --reset -p yes || true
-	docker buildx create --driver docker-container --use || true
+	@if ! docker buildx inspect "$(BUILDER_NAME)" >/dev/null 2>&1; then \
+		docker buildx create --name "$(BUILDER_NAME)" --driver docker-container --use; \
+	fi
+	docker buildx use "$(BUILDER_NAME)"
 
 # Registry authentications (optional for pulling base images if credentials provided)
 login:
@@ -44,31 +48,38 @@ login:
 
 # Build image locally and load it into local docker daemon (no push)
 build: setup-buildx login
-	docker buildx build \
-		--provenance=false \
-		--pull \
-		--load \
-		--build-arg ALPINE_VERSION="$(ALPINE_VERSION)" \
-		--build-arg ANSIBLE_VERSION="$(BUILD_ANSIBLE_VERSION)" \
-		--build-arg ANSIBLE_LINT_VERSION="$(ANSIBLE_LINT_VERSION)" \
-		--build-arg MITOGEN_VERSION="$(MITOGEN_VERSION)" \
-		--build-arg BUILD_NAME="$(CI_PROJECT_NAME)" \
-		--build-arg BUILD_DATE="$$(date '+%FT%T.%s%z')" \
-		--build-arg BUILD_VCSREF="$$(echo $(CI_COMMIT_SHA) | cut -c1-8)" \
-		-t "$(CI_REGISTRY_IMAGE):$(CI_COMMIT_SHA)" \
-		.
+	@if docker image inspect "$(CI_REGISTRY_IMAGE):$(CI_COMMIT_SHA)" >/dev/null 2>&1; then \
+		echo "Image $(CI_REGISTRY_IMAGE):$(CI_COMMIT_SHA) already exists locally, skipping build."; \
+	else \
+		status=0; \
+		docker buildx build \
+			--provenance=false \
+			--pull \
+			--load \
+			--build-arg ALPINE_VERSION="$(ALPINE_VERSION)" \
+			--build-arg ANSIBLE_VERSION="$(BUILD_ANSIBLE_VERSION)" \
+			--build-arg ANSIBLE_LINT_VERSION="$(ANSIBLE_LINT_VERSION)" \
+			--build-arg MITOGEN_VERSION="$(MITOGEN_VERSION)" \
+			--build-arg BUILD_NAME="$(CI_PROJECT_NAME)" \
+			--build-arg BUILD_DATE="$$(date '+%FT%T.%s%z')" \
+			--build-arg BUILD_VCSREF="$$(echo $(CI_COMMIT_SHA) | cut -c1-8)" \
+			-t "$(CI_REGISTRY_IMAGE):$(CI_COMMIT_SHA)" \
+			. || status=$$?; \
+		docker buildx rm "$(BUILDER_NAME)" || true; \
+		exit $$status; \
+	fi
 
 # Tests
 test: test-ansible test-mitogen test-trivy
 
-test-ansible:
+test-ansible: build
 	docker run --rm "$(CI_REGISTRY_IMAGE):$(CI_COMMIT_SHA)" ansible --version
 	docker run --rm "$(CI_REGISTRY_IMAGE):$(CI_COMMIT_SHA)" ansible-lint --version
 
-test-mitogen:
+test-mitogen: build
 	docker run --rm "$(CI_REGISTRY_IMAGE):$(CI_COMMIT_SHA)" python3 -c "import ansible_mitogen"
 
-test-trivy:
+test-trivy: build
 	@mkdir -p "$(CURDIR)/trivy-cache"
 	docker run --rm \
 		-e TRIVY_USERNAME="$(CI_REGISTRY_USER)" \
@@ -87,5 +98,5 @@ test-trivy:
 
 # Cleanup local buildx configurations
 clean:
-	docker buildx rm || true
-	rm -rf "$(CURDIR)/trivy-cache"
+	docker buildx rm "$(BUILDER_NAME)" || true
+	docker run --rm -v "$(CURDIR):/workspace" alpine sh -c "rm -rf /workspace/trivy-cache" || rm -rf "$(CURDIR)/trivy-cache"

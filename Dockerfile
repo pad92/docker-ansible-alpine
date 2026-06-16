@@ -3,10 +3,10 @@ FROM alpine:${ALPINE_VERSION}
 
 # Metadata params
 ARG BUILD_DATE
-ARG ANSIBLE_VERSION=12.3.0
+ARG ANSIBLE_VERSION=13.7.0
 ARG ANSIBLE_LINT_VERSION=26.4.0
 ARG MITOGEN_VERSION=0.3.49
-ARG VCS_REF
+ARG BUILD_VCSREF
 
 # Metadata
 LABEL org.opencontainers.image.authors="Pascal A. <pascalito@gmail.com>" \
@@ -14,7 +14,7 @@ LABEL org.opencontainers.image.authors="Pascal A. <pascalito@gmail.com>" \
       org.opencontainers.image.documentation="https://gitlab.com/pad92/docker-ansible-alpine/blob/master/README.md" \
       org.opencontainers.image.source="https://gitlab.com/pad92/docker-ansible-alpine.git" \
       org.opencontainers.image.version=${ANSIBLE_VERSION} \
-      org.opencontainers.image.revision=${VCS_REF} \
+      org.opencontainers.image.revision=${BUILD_VCSREF} \
       org.opencontainers.image.created=${BUILD_DATE} \
       org.opencontainers.image.title="docker-ansible-alpine" \
       org.opencontainers.image.description="Ansible on Alpine Docker image" \
