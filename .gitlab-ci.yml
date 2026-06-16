@@ -8,15 +8,16 @@ default:
     - chataigne
 
 variables:
-  ALPINE_VERSION: "3.20"
-  ANSIBLE_VERSION: "11.13.0"
+  ALPINE_VERSION: "3.22"
+  ANSIBLE_VERSION: "12.2.0"
   ANSIBLE_LINT_VERSION: "25.12.0"
   MITOGEN_VERSION: "0.3.49"
   DOCKER_AUTH_CONFIG: ""
 
 stages:
-- build_image
+- build
 - test
+- release
 
 before_script:
   - docker login -u "${CI_REGISTRY_USER}" -p "${CI_JOB_TOKEN}" "${CI_REGISTRY}"
@@ -25,151 +26,128 @@ before_script:
       echo "${DOCKER_HUB_PASSWORD}" | docker login -u "${DOCKER_HUB_USER}" --password-stdin
     fi
 
-build_image.default:
-  stage: build_image
+build_image:
+  stage: build
   script:
-  - docker buildx create --driver docker-container --use
-  - docker buildx build
-    --provenance=false
-    --pull
-    --push
-    --build-arg ALPINE_VERSION="${ALPINE_VERSION}"
-    --build-arg ANSIBLE_VERSION="${ANSIBLE_VERSION}"
-    --build-arg ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}"
-    --build-arg MITOGEN_VERSION="${MITOGEN_VERSION}"
-    --build-arg BUILD_NAME="${CI_PROJECT_NAME}"
-    --build-arg BUILD_DATE="$(date '+%FT%T.%s%z')"
-    --build-arg BUILD_VCSREF="${CI_COMMIT_SHA:0:8}"
-    --platform=linux/amd64
-    -t "${CI_REGISTRY_IMAGE}:${ANSIBLE_VERSION}"
-    .
-  only:
-  - master
-  except:
-  - tags
+    - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes || true
+    - docker buildx create --driver docker-container --use
+    - |
+      BUILD_ANSIBLE_VERSION="${ANSIBLE_VERSION}"
+      if [ -n "${CI_COMMIT_TAG}" ]; then
+        BUILD_ANSIBLE_VERSION="${CI_COMMIT_TAG}"
+      fi
+    - |
+      docker buildx build \
+        --provenance=false \
+        --pull \
+        --push \
+        --build-arg ALPINE_VERSION="${ALPINE_VERSION}" \
+        --build-arg ANSIBLE_VERSION="${BUILD_ANSIBLE_VERSION}" \
+        --build-arg ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}" \
+        --build-arg MITOGEN_VERSION="${MITOGEN_VERSION}" \
+        --build-arg BUILD_NAME="${CI_PROJECT_NAME}" \
+        --build-arg BUILD_DATE="$(date '+%FT%T.%s%z')" \
+        --build-arg BUILD_VCSREF="${CI_COMMIT_SHA:0:8}" \
+        --platform=linux/amd64,linux/arm64 \
+        -t "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}" \
+        .
 
-build_image.feature:
-  stage: build_image
-  script:
-  - docker buildx create --driver docker-container --use
-  - docker buildx build
-    --provenance=false
-    --pull
-    --push
-    --build-arg ALPINE_VERSION="${ALPINE_VERSION}"
-    --build-arg ANSIBLE_VERSION="${ANSIBLE_VERSION}"
-    --build-arg ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}"
-    --build-arg MITOGEN_VERSION="${MITOGEN_VERSION}"
-    --build-arg BUILD_NAME="${CI_PROJECT_NAME}"
-    --build-arg BUILD_DATE="$(date '+%FT%T.%s%z')"
-    --build-arg BUILD_VCSREF="${CI_COMMIT_SHA:0:8}"
-    --platform=linux/amd64
-    -t "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME%%-*}"
-    .
-  only:
-  - "/^[0-9]+-.*$/"
-  except:
-  - tags
-
-build_image.nonstd:
-  stage: build_image
-  script:
-  - docker buildx create --driver docker-container --use
-  - docker buildx build
-    --provenance=false
-    --pull
-    --push
-    --build-arg ALPINE_VERSION="${ALPINE_VERSION}"
-    --build-arg ANSIBLE_VERSION="${ANSIBLE_VERSION}"
-    --build-arg ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}"
-    --build-arg MITOGEN_VERSION="${MITOGEN_VERSION}"
-    --build-arg BUILD_NAME="${CI_PROJECT_NAME}"
-    --build-arg BUILD_DATE="$(date '+%FT%T.%s%z')"
-    --build-arg BUILD_VCSREF="${CI_COMMIT_SHA:0:8}"
-    --platform=linux/amd64
-    -t "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME:0:128}"
-    .
-  only:
-  - "/^[a-zA-Z]+.*$/"
-  except:
-  - master
-  - dev
-  - tags
-
-build_image.tag:
-  stage: build_image
-  script:
-  - docker buildx create --driver docker-container --use
-  - docker buildx build
-    --provenance=false
-    --pull
-    --build-arg ALPINE_VERSION="${ALPINE_VERSION}"
-    --build-arg ANSIBLE_VERSION="${CI_COMMIT_REF_NAME}"
-    --build-arg ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}"
-    --build-arg MITOGEN_VERSION="${MITOGEN_VERSION}"
-    --build-arg BUILD_NAME="${CI_PROJECT_NAME}"
-    --build-arg BUILD_DATE="$(date '+%FT%T.%s%z')"
-    --build-arg BUILD_VCSREF="${CI_COMMIT_SHA:0:8}"
-    --platform=linux/arm64,linux/amd64
-    --push
-    -t "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME}"
-    -t "${DU_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME}"
-    -t "${CI_REGISTRY_IMAGE}:latest"
-    -t "${DU_REGISTRY_IMAGE}:latest"
-    .
-  only:
-  - tags
-
-test_image.default:
+test_ansible:
   stage: test
-  image: "${CI_REGISTRY_IMAGE}:${ANSIBLE_VERSION}"
+  image: "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
   before_script: []
   script:
-  - ansible --version
-  - ansible-lint --version
-  - python3 -c "import ansible_mitogen"
-  only:
-  - master
-  except:
-  - tags
+    - ansible --version
+    - ansible-lint --version
 
-test_image.feature:
+test_mitogen:
   stage: test
-  image: "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME%%-*}"
+  image: "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
   before_script: []
   script:
-  - ansible --version
-  - ansible-lint --version
-  - python3 -c "import ansible_mitogen"
-  only:
-  - "/^[0-9]+-.*$/"
-  except:
-  - tags
+    - python3 -c "import ansible_mitogen"
 
-test_image.nonstd:
+test_trivy:
   stage: test
-  image: "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME:0:128}"
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
   before_script: []
+  variables:
+    TRIVY_USERNAME: "${CI_REGISTRY_USER}"
+    TRIVY_PASSWORD: "${CI_JOB_TOKEN}"
+    TRIVY_CACHE_DIR: "${CI_PROJECT_DIR}/trivy-cache"
+  cache:
+    key: trivy-cache
+    paths:
+      - trivy-cache/
   script:
-  - ansible --version
-  - ansible-lint --version
-  - python3 -c "import ansible_mitogen"
-  only:
-  - "/^[a-zA-Z]+.*$/"
-  except:
-  - master
-  - dev
-  - tags
+    - trivy image --cache-dir "${TRIVY_CACHE_DIR}" --exit-code 1 --severity CRITICAL --no-progress "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+    - trivy image --cache-dir "${TRIVY_CACHE_DIR}" --exit-code 0 --severity HIGH --no-progress "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
 
-test_image.tag:
-  stage: test
-  image: "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME}"
-  before_script: []
+.release_base:
+  stage: release
+  before_script:
+    - docker login -u "${CI_REGISTRY_USER}" -p "${CI_JOB_TOKEN}" "${CI_REGISTRY}"
+    - |
+      if [ -n "${DOCKER_HUB_PASSWORD}" ] && [ -n "${DOCKER_HUB_USER}" ]; then
+        echo "${DOCKER_HUB_PASSWORD}" | docker login -u "${DOCKER_HUB_USER}" --password-stdin
+      fi
+
+release_tag:
+  extends: .release_base
+  variables:
+    RELEASE_TAGS: "${CI_COMMIT_TAG} latest"
   script:
-  - ansible --version
-  - ansible-lint --version
-  - python3 -c "import ansible_mitogen"
-  only:
-  - tags
+    - |
+      DOCKER_HUB_IMAGE="${DU_REGISTRY_IMAGE:-pad92/ansible-alpine}"
+      TAGS=""
+      for tag in ${RELEASE_TAGS}; do
+        TAGS="${TAGS} --tag ${CI_REGISTRY_IMAGE}:${tag}"
+        if [ -n "${DOCKER_HUB_USER}" ] && [ -n "${DOCKER_HUB_PASSWORD}" ]; then
+          TAGS="${TAGS} --tag ${DOCKER_HUB_IMAGE}:${tag}"
+        fi
+      done
+      echo "Promoting image ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA} to tags: ${RELEASE_TAGS}"
+      docker buildx imagetools create ${TAGS} "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+  rules:
+    - if: $CI_COMMIT_TAG
 
+release_master:
+  extends: .release_base
+  variables:
+    RELEASE_TAGS: "${ANSIBLE_VERSION}"
+  script:
+    - |
+      DOCKER_HUB_IMAGE="${DU_REGISTRY_IMAGE:-pad92/ansible-alpine}"
+      TAGS=""
+      for tag in ${RELEASE_TAGS}; do
+        TAGS="${TAGS} --tag ${CI_REGISTRY_IMAGE}:${tag}"
+        if [ -n "${DOCKER_HUB_USER}" ] && [ -n "${DOCKER_HUB_PASSWORD}" ]; then
+          TAGS="${TAGS} --tag ${DOCKER_HUB_IMAGE}:${tag}"
+        fi
+      done
+      echo "Promoting image ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA} to tags: ${RELEASE_TAGS}"
+      docker buildx imagetools create ${TAGS} "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master"
 
+release_feature:
+  extends: .release_base
+  script:
+    - |
+      TAG_PREFIX="${CI_COMMIT_REF_NAME%%-*}"
+      echo "Promoting image to feature tag: ${TAG_PREFIX}"
+      docker buildx imagetools create --tag "${CI_REGISTRY_IMAGE}:${TAG_PREFIX}" "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^[0-9]+-.*$/'
+
+release_nonstd:
+  extends: .release_base
+  script:
+    - |
+      TAG_NAME="${CI_COMMIT_REF_NAME:0:128}"
+      echo "Promoting image to branch tag: ${TAG_NAME}"
+      docker buildx imagetools create --tag "${CI_REGISTRY_IMAGE}:${TAG_NAME}" "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^[a-zA-Z]+.*$/ && $CI_COMMIT_BRANCH != "master" && $CI_COMMIT_BRANCH != "dev"'

@@ -1,0 +1,25 @@
+# Exclude Git folders
+.git
+.gitignore
+
+# Exclude CI/CD and Local Automation
+.gitlab-ci.yml
+Makefile
+
+# Exclude Local Cache directories
+trivy-cache
+.trivycache
+__pycache__
+*.pyc
+
+# Exclude Documentation and metadata
+README.md
+CHANGELOG.md
+LICENSE
+.editorconfig
+
+# Exclude Editor/IDE folders
+.vscode
+.idea
+*.swp
+*.swo

@@ -64,3 +64,34 @@ docker run -it --rm \
   pad92/ansible-alpine:latest \
   sh
 ```
+
+## Local Development and Testing
+
+A `Makefile` is provided to build and run the test suite locally, matching the steps and variables configured in `.gitlab-ci.yml`.
+
+### Build the Image
+To build the Docker image locally and load it directly into your local Docker daemon storage (no registry push):
+```sh
+make build
+```
+
+### Run All Tests
+To run all tests (Ansible functional checks, Mitogen imports, and Trivy security scans):
+```sh
+make test
+```
+*Note: The Trivy scan mounts your host's `/var/run/docker.sock` to scan the locally built image without pulling it, and persists its database to `./trivy-cache`.*
+
+### Run Specific Test Targets
+You can also run specific test jobs individually:
+```sh
+make test-ansible    # Run ansible and ansible-lint checks
+make test-mitogen    # Run mitogen import verification
+make test-trivy      # Run Trivy vulnerability scan
+```
+
+### Cleanup
+To remove the local Trivy cache database and clean up buildx configurations:
+```sh
+make clean
+```
