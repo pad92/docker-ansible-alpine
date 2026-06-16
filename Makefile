@@ -1,9 +1,9 @@
 # Docker Ansible Alpine - Build and Test Pipeline (Local Development)
 
 # Target variables with sensible defaults
-ALPINE_VERSION     ?= 3.22
-ANSIBLE_VERSION    ?= 12.2.0
-ANSIBLE_LINT_VERSION ?= 25.12.0
+ALPINE_VERSION     ?= 3.24
+ANSIBLE_VERSION    ?= 12.3.0
+ANSIBLE_LINT_VERSION ?= 26.4.0
 MITOGEN_VERSION    ?= 0.3.49
 
 # Variables (fallbacks for local development)
