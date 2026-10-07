@@ -7,14 +7,14 @@
 ![Docker Stars](https://img.shields.io/docker/stars/pad92/ansible-alpine)
 ## Usage
 
-### Environnement variable
+### Environment variables
 
 | Variable             | Default Value    | Usage                                       |
 |----------------------|------------------|---------------------------------------------|
-| PIP_REQUIREMENTS     | requirements.txt | install python library requirements         |
-| ANSIBLE_REQUIREMENTS | requirements.yml | install ansible galaxy roles requirements   |
-| DEPLOY_KEY           |                  | pass an SSH private key to use in container |
-| CA_CERT_UPGRADE      |                  | set to `true` to update ca-certificates package |
+| PIP_REQUIREMENTS     | requirements.txt | Install Python package requirements         |
+| ANSIBLE_REQUIREMENTS | requirements.yml | Install Ansible Galaxy requirements          |
+| DEPLOY_KEY           |                  | Provide an SSH private key to the container  |
+| CA_CERT_UPGRADE      |                  | Set to `true` to update ca-certificates      |
 
 ### Mitogen
 
@@ -26,13 +26,13 @@ strategy_plugins = /usr/lib/python3.14/site-packages/ansible_mitogen/plugins/str
 strategy = mitogen_linear
 ```
 
-Full documentation : https://mitogen.networkgenomics.com/ansible_detailed.html
+Full documentation: https://mitogen.networkgenomics.com/ansible_detailed.html
 
 ### Run Playbook
 
 ```sh
 docker run -it --rm \
-  -v ${PWD}:/ansible \
+  -v "${PWD}:/ansible" \
   pad92/ansible-alpine:latest \
   ansible-playbook -i inventory playbook.yml
 ```
@@ -41,7 +41,7 @@ docker run -it --rm \
 
 ```sh
 docker run -it --rm \
-  -v ${PWD}:/ansible \
+  -v "${PWD}:/ansible" \
   pad92/ansible-alpine:latest \
   ansible-galaxy init role-name
 ```
@@ -50,7 +50,7 @@ docker run -it --rm \
 
 ```sh
 docker run -it --rm \
-  -v ${PWD}:/ansible \
+  -v "${PWD}:/ansible" \
   pad92/ansible-alpine:latest \
   ansible-lint tests/playbook.yml
 ```
@@ -59,8 +59,8 @@ docker run -it --rm \
 
 ```sh
 docker run -it --rm \
-  -v $(readlink -f $SSH_AUTH_SOCK):/ssh-agent \
-  -v ${PWD}:/ansible \
+  -v "$(readlink -f "$SSH_AUTH_SOCK"):/ssh-agent" \
+  -v "${PWD}:/ansible" \
   -e SSH_AUTH_SOCK=/ssh-agent \
   pad92/ansible-alpine:latest \
   sh
@@ -70,9 +70,9 @@ docker run -it --rm \
 
 ```sh
 docker run -it --rm \
-  -v $(readlink -f $SSH_AUTH_SOCK):/ssh-agent \
-  -v ${PWD}:/ansible \
-  -v ${PWD}/ca-certificates:/usr/local/share/ca-certificates \
+  -v "$(readlink -f "$SSH_AUTH_SOCK"):/ssh-agent" \
+  -v "${PWD}:/ansible" \
+  -v "${PWD}/ca-certificates:/usr/local/share/ca-certificates" \
   -e SSH_AUTH_SOCK=/ssh-agent \
   pad92/ansible-alpine:latest sh
 ```
@@ -84,7 +84,7 @@ A `Makefile` is provided to build and run the test suite locally, matching the s
 
 ### Version control
 
-The image versions are defined in `versions.env`. `make build` and the CI pipeline use that file directly. The Dockerfile requires the version arguments, so a direct Docker build must pass the same values explicitly:
+Image versions live in `versions.env`. Both `make build` and the CI pipeline read that file. A direct Docker build needs the same version arguments:
 
 ```sh
 . ./versions.env
@@ -99,15 +99,15 @@ docker build \
 
 ### Automatic Ansible updates
 
-The project includes a scheduled GitLab job that checks PyPI for a newer Ansible release. When it finds one, it creates a branch and a Merge Request that updates `versions.env` and `CHANGELOG.md`. The usual build, version check, and security tests then run on that Merge Request.
+The scheduled GitLab job checks PyPI for a newer Ansible release. If one is available, it opens a merge request that updates `versions.env` and `CHANGELOG.md`. The regular build and security jobs then run for the merge request.
 
-Create a daily or weekly pipeline schedule on the default branch and add a masked project variable named `GITLAB_API_TOKEN`. The token needs permission to read the repository and create branches, commits, and Merge Requests through the GitLab API.
+Create a daily or weekly pipeline schedule on the default branch. Add a masked project variable named `GITLAB_API_TOKEN` with permission to read the repository, create branches and commits, and open merge requests through the GitLab API.
 
-### Build manuel d'une version
+### Manual build for an Ansible version
 
-Pour construire ponctuellement une version précise sans modifier `versions.env`, lance une pipeline depuis **Run pipeline**. Le job `build_manual_ansible` propose déjà `MANUAL_ANSIBLE_VERSION=13.7.0` et `MANUAL_ANSIBLE_CORE_VERSION=2.20.9` ; ces valeurs restent modifiables avant de démarrer le job.
+To build a specific Ansible version without changing `versions.env`, start a pipeline from **Run pipeline**. The form pre-fills `MANUAL_ANSIBLE_VERSION` with `13.7.0`. Leave `MANUAL_ANSIBLE_CORE_VERSION` empty to resolve a compatible core version automatically, or set it to pin one yourself.
 
-La pipeline récupère automatiquement une version compatible d'`ansible-core` et publie l'image sous un tag de la forme `ansible-13.7.0-<commit>`. Tu peux imposer une version avec `MANUAL_ANSIBLE_CORE_VERSION` ou choisir le tag avec `MANUAL_IMAGE_TAG`.
+The job publishes the image as `ansible-<version>-<commit>`, for example `ansible-13.7.0-abc12345`. Set `MANUAL_IMAGE_TAG` to choose a different tag.
 
 ### Build the Image
 To build the Docker image locally and load it directly into your local Docker daemon storage (no registry push):
