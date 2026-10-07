@@ -8,7 +8,6 @@ default:
     - chataigne
 
 variables:
-  DOCKER_AUTH_CONFIG: ""
   MANUAL_ANSIBLE_VERSION:
     value: "13.7.0"
     description: "Version Ansible du build manuel."
