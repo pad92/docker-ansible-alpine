@@ -1,4 +1,6 @@
 #!/bin/sh
+# Keep optional SSH setup best-effort; installation steps below fail explicitly.
+set -u
 #
 # Simple wrapper for executing ansible-galaxy and ansible-playbook.
 #
@@ -23,7 +25,7 @@ if [ -f "ansible.log" ]; then
 fi
 
 # Optional deploy key
-if [ ! -z "$DEPLOY_KEY" ] && [ ! -f "/root/.ssh/id_rsa" ]; then
+if [ -n "${DEPLOY_KEY:-}" ] && [ ! -f "/root/.ssh/id_rsa" ]; then
     mkdir -p /root/.ssh/
     echo "${DEPLOY_KEY}" > /root/.ssh/id_rsa
     chmod 0600 /root/.ssh/id_rsa
@@ -35,38 +37,44 @@ if [ -f "/root/.ssh/id_rsa" ]; then
     ssh-add /root/.ssh/id_rsa
 fi
 
+# upgrade ca-certificates package
+if [ "x${CA_CERT_UPGRADE:-}" = "xtrue" ]; then
+    apk add --upgrade --no-cache ca-certificates
+fi
+
+# Export the CA bundle before any Python network operation.
+if [ -z "${REQUESTS_CA_BUNDLE:-}" ]; then
+    REQUESTS_CA_BUNDLE='/etc/ssl/certs/ca-certificates.crt'
+fi
+export REQUESTS_CA_BUNDLE
+
+# Load custom certificates before installing pip or Galaxy requirements.
+if [ "$(find /usr/local/share/ca-certificates/ -type f -name '*.crt' 2>/dev/null | wc -l)" -gt "0" ]; then
+    update-ca-certificates
+fi
+
 # install pip requirements, if any
-if [ -z "$PIP_REQUIREMENTS" ]; then
+if [ -z "${PIP_REQUIREMENTS:-}" ]; then
     PIP_REQUIREMENTS=requirements.txt
 fi
 
 if [ -f "$PIP_REQUIREMENTS" ]; then
-    pip3 install --upgrade -r $PIP_REQUIREMENTS
+    if ! pip3 install --upgrade -r "$PIP_REQUIREMENTS"; then
+        echo "pip requirements installation failed" >&2
+        exit 1
+    fi
 fi
 
 # install Galaxy roles, if any
-if [ -z "$ANSIBLE_REQUIREMENTS" ]; then
+if [ -z "${ANSIBLE_REQUIREMENTS:-}" ]; then
     ANSIBLE_REQUIREMENTS=requirements.yml
 fi
 
 if [ -f "$ANSIBLE_REQUIREMENTS" ]; then
-    ansible-galaxy install $ANSIBLE_GALAXY_PARAM -r $ANSIBLE_REQUIREMENTS
-fi
-
-# upgrade ca-certificates package
-if [ "x${CA_CERT_UPGRADE}" = "xtrue" ]; then
-    apk add --upgrade --no-cache ca-certificates
-fi
-
-# export REQUESTS_CA_BUNDLE
-if [ -z "${REQUESTS_CA_BUNDLE}" ]; then
-    REQUESTS_CA_BUNDLE='/etc/ssl/certs/ca-certificates.crt'
-fi
-export REQUESTS_CA_BUNDLE="${REQUESTS_CA_BUNDLE}"
-
-# update ca-certs
-if [ "$(find /usr/local/share/ca-certificates/ -type f -name '*.crt' 2>/dev/null | wc -l)" -gt "0" ]; then
-    update-ca-certificates
+    if ! ansible-galaxy install ${ANSIBLE_GALAXY_PARAM:-} -r "$ANSIBLE_REQUIREMENTS"; then
+        echo "Ansible Galaxy requirements installation failed" >&2
+        exit 1
+    fi
 fi
 
 exec "$@"

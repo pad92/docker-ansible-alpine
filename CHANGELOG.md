@@ -5,7 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Upgrade the Alpine base image to `3.24.2` and pin its multi-platform digest.
+- Upgrade Ansible to `14.5.0` with `ansible-core` `2.21.5`.
+- Upgrade `ansible-lint` to `26.9.0` and Mitogen to `0.3.53`.
+
 ## [13.7.0] - 2026-06-16
+
+### Fixed
+- Load custom CA certificates before pip and Ansible Galaxy network operations.
+- Fail entrypoint setup on dependency installation errors and preserve requirement file paths containing spaces.
+- Use stdin for Docker registry authentication and make HIGH-severity Trivy findings blocking.
+- Validate centralized versions and pin the Alpine base image and Trivy scanner by digest.
+- Display Makefile usage information when `make` is run without a target.
+- Keep optional SSH setup tolerant of key errors while failing on dependency installation errors.
+- Use `versions.env` as the required source for image versions, keep Git tags from changing the Ansible version, and verify the installed Ansible package in tests.
+- Pin the Ansible Core version used by the image.
+- Check PyPI from a scheduled GitLab job and open a Merge Request for new Ansible releases.
 
 ### Added
 - Added custom CA certificates support via volume mounting to `/usr/local/share/ca-certificates/` and automatic execution of `update-ca-certificates` in entrypoint.

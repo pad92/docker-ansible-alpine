@@ -1,6 +1,7 @@
 # Trivy Cache
 trivy-cache/
 .trivycache/
+.buildx-builder-created
 
 # Python Cache
 __pycache__/

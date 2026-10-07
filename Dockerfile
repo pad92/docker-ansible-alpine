@@ -1,11 +1,12 @@
-ARG ALPINE_VERSION=3.24
-FROM alpine:${ALPINE_VERSION}
+ARG ALPINE_IMAGE=alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+FROM ${ALPINE_IMAGE}
 
 # Metadata params
 ARG BUILD_DATE
-ARG ANSIBLE_VERSION=13.7.0
-ARG ANSIBLE_LINT_VERSION=26.4.0
-ARG MITOGEN_VERSION=0.3.49
+ARG ANSIBLE_VERSION
+ARG ANSIBLE_CORE_VERSION
+ARG ANSIBLE_LINT_VERSION
+ARG MITOGEN_VERSION
 ARG BUILD_VCSREF
 
 # Metadata
@@ -42,8 +43,13 @@ RUN apk add --no-cache --virtual .build-deps \
         libffi-dev \
         openssl-dev \
         python3-dev \
+  && test -n "${ANSIBLE_VERSION}" \
+  && test -n "${ANSIBLE_CORE_VERSION}" \
+  && test -n "${ANSIBLE_LINT_VERSION}" \
+  && test -n "${MITOGEN_VERSION}" \
   && pip3 install --no-cache-dir \
         ansible==${ANSIBLE_VERSION} \
+        ansible-core==${ANSIBLE_CORE_VERSION} \
         ansible-lint==${ANSIBLE_LINT_VERSION} \
         mitogen==${MITOGEN_VERSION} \
   && apk del .build-deps \
@@ -68,4 +74,3 @@ ENTRYPOINT ["entrypoint"]
 
 # default command: display Ansible version
 CMD [ "ansible-playbook", "--version" ]
-
