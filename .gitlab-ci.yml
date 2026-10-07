@@ -9,36 +9,65 @@ default:
 
 variables:
   DOCKER_AUTH_CONFIG: ""
+  MANUAL_ANSIBLE_VERSION:
+    value: "13.7.0"
+    description: "Version Ansible du build manuel."
+  MANUAL_ANSIBLE_CORE_VERSION:
+    value: ""
+    description: "Override ansible-core ; vide pour la résolution automatique."
+  MANUAL_IMAGE_TAG:
+    value: ""
+    description: "Tag Docker ; vide pour ansible-<version>-<commit>."
 
 stages:
+- automation
 - build
 - test
 - release
 
 before_script:
-  - docker login -u "${CI_REGISTRY_USER}" -p "${CI_JOB_TOKEN}" "${CI_REGISTRY}"
+  - printf '%s' "${CI_JOB_TOKEN}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
   - |
     if [ -n "${DOCKER_HUB_PASSWORD}" ] && [ -n "${DOCKER_HUB_USER}" ]; then
       echo "${DOCKER_HUB_PASSWORD}" | docker login -u "${DOCKER_HUB_USER}" --password-stdin
     fi
 
+check_ansible_release:
+  stage: automation
+  resource_group: ansible-release-check
+  image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+  before_script:
+    - apk add --no-cache coreutils curl jq
+  script:
+    - ./ci/check-ansible-release.sh
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
 build_image:
   stage: build
+  rules:
+    - if: '$CI_PIPELINE_SOURCE != "schedule" && $CI_PIPELINE_SOURCE != "web"'
   script:
     - |
       . ./versions.env
-      docker run --rm --privileged multiarch/qemu-user-static --reset -p yes || true
+      test -n "${ALPINE_IMAGE}"
+      test -n "${ANSIBLE_VERSION}"
+      test -n "${ANSIBLE_CORE_VERSION}"
+      test -n "${ANSIBLE_LINT_VERSION}"
+      test -n "${MITOGEN_VERSION}"
+      grep -q '^ARG ANSIBLE_VERSION$' Dockerfile
+      grep -q '^ARG ANSIBLE_CORE_VERSION$' Dockerfile
+      grep -q '^ARG ANSIBLE_LINT_VERSION$' Dockerfile
+      grep -q '^ARG MITOGEN_VERSION$' Dockerfile
+      docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
       docker buildx create --driver docker-container --use
-      BUILD_ANSIBLE_VERSION="${ANSIBLE_VERSION}"
-      if [ -n "${CI_COMMIT_TAG}" ]; then
-        BUILD_ANSIBLE_VERSION="${CI_COMMIT_TAG}"
-      fi
       docker buildx build \
         --provenance=false \
         --pull \
         --push \
-        --build-arg ALPINE_VERSION="${ALPINE_VERSION}" \
-        --build-arg ANSIBLE_VERSION="${BUILD_ANSIBLE_VERSION}" \
+        --build-arg ALPINE_IMAGE="${ALPINE_IMAGE}" \
+        --build-arg ANSIBLE_VERSION="${ANSIBLE_VERSION}" \
+        --build-arg ANSIBLE_CORE_VERSION="${ANSIBLE_CORE_VERSION}" \
         --build-arg ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}" \
         --build-arg MITOGEN_VERSION="${MITOGEN_VERSION}" \
         --build-arg BUILD_NAME="${CI_PROJECT_NAME}" \
@@ -48,16 +77,82 @@ build_image:
         -t "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}" \
         .
 
+build_manual_ansible:
+  stage: build
+  before_script: []
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: false
+    - when: never
+  script:
+    - apk add --no-cache curl jq
+    - test -n "${MANUAL_ANSIBLE_VERSION:-}" || (echo "Set MANUAL_ANSIBLE_VERSION before starting this job" >&2; exit 1)
+    - . ./versions.env
+    - |
+      if [ -n "${MANUAL_ANSIBLE_CORE_VERSION:-}" ]; then
+        manual_core_version="${MANUAL_ANSIBLE_CORE_VERSION}"
+      else
+        manual_core_version="$(curl --fail --silent --show-error \
+          "https://pypi.org/pypi/ansible/${MANUAL_ANSIBLE_VERSION}/json" \
+          | jq --raw-output '(.info.requires_dist // [])[] | select(startswith("ansible-core~=")) | split("~=")[1] | split(",")[0]' \
+          | head -n 1)"
+      fi
+      test -n "${manual_core_version}" || {
+        echo "Unable to determine a compatible ansible-core for ${MANUAL_ANSIBLE_VERSION}" >&2
+        exit 1
+      }
+      manual_image_tag="${MANUAL_IMAGE_TAG:-ansible-${MANUAL_ANSIBLE_VERSION}-${CI_COMMIT_SHORT_SHA}}"
+      case "${manual_image_tag}" in
+        ''|*[!a-zA-Z0-9_.-]*)
+          echo "MANUAL_IMAGE_TAG contains unsupported characters" >&2
+          exit 1
+          ;;
+      esac
+      printf 'Building %s with ansible-core %s\n' "${MANUAL_ANSIBLE_VERSION}" "${manual_core_version}"
+      printf '%s' "${CI_JOB_TOKEN}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
+      if [ -n "${DOCKER_HUB_PASSWORD:-}" ] && [ -n "${DOCKER_HUB_USER:-}" ]; then
+        printf '%s' "${DOCKER_HUB_PASSWORD}" | docker login --username "${DOCKER_HUB_USER}" --password-stdin
+      fi
+      docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+      docker buildx create --driver docker-container --use
+      docker buildx build \
+        --provenance=false \
+        --pull \
+        --push \
+        --platform=linux/amd64,linux/arm64 \
+        --build-arg ALPINE_IMAGE="${ALPINE_IMAGE}" \
+        --build-arg ANSIBLE_VERSION="${MANUAL_ANSIBLE_VERSION}" \
+        --build-arg ANSIBLE_CORE_VERSION="${manual_core_version}" \
+        --build-arg ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}" \
+        --build-arg MITOGEN_VERSION="${MITOGEN_VERSION}" \
+        --build-arg BUILD_NAME="${CI_PROJECT_NAME}" \
+        --build-arg BUILD_DATE="$(date '+%FT%T.%s%z')" \
+        --build-arg BUILD_VCSREF="${CI_COMMIT_SHA:0:8}" \
+        -t "${CI_REGISTRY_IMAGE}:${manual_image_tag}" \
+        .
+      echo "Image published: ${CI_REGISTRY_IMAGE}:${manual_image_tag}"
+
 test_ansible:
   stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE != "schedule" && $CI_PIPELINE_SOURCE != "web"'
   image: "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
   before_script: []
   script:
+    - expected="$(sed -n 's/^ANSIBLE_VERSION=//p' versions.env)"
+    - actual="$(python3 -c 'import importlib.metadata as m; print(m.version("ansible"))')"
+    - test "${actual}" = "${expected}"
+    - expected_core="$(sed -n 's/^ANSIBLE_CORE_VERSION=//p' versions.env)"
+    - actual_core="$(python3 -c 'import importlib.metadata as m; print(m.version("ansible-core"))')"
+    - test "${actual_core}" = "${expected_core}"
     - ansible --version
     - ansible-lint --version
 
 test_mitogen:
   stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE != "schedule" && $CI_PIPELINE_SOURCE != "web"'
   image: "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
   before_script: []
   script:
@@ -65,8 +160,10 @@ test_mitogen:
 
 test_trivy:
   stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE != "schedule" && $CI_PIPELINE_SOURCE != "web"'
   image:
-    name: aquasec/trivy:latest
+    name: aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
     entrypoint: [""]
   before_script: []
   variables:
@@ -79,12 +176,12 @@ test_trivy:
       - trivy-cache/
   script:
     - trivy image --cache-dir "${TRIVY_CACHE_DIR}" --exit-code 1 --severity CRITICAL --no-progress "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
-    - trivy image --cache-dir "${TRIVY_CACHE_DIR}" --exit-code 0 --severity HIGH --no-progress "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+    - trivy image --cache-dir "${TRIVY_CACHE_DIR}" --exit-code 1 --severity HIGH --no-progress "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
 
 .release_base:
   stage: release
   before_script:
-    - docker login -u "${CI_REGISTRY_USER}" -p "${CI_JOB_TOKEN}" "${CI_REGISTRY}"
+    - printf '%s' "${CI_JOB_TOKEN}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
     - |
       if [ -n "${DOCKER_HUB_PASSWORD}" ] && [ -n "${DOCKER_HUB_USER}" ]; then
         echo "${DOCKER_HUB_PASSWORD}" | docker login -u "${DOCKER_HUB_USER}" --password-stdin
@@ -107,7 +204,7 @@ release_tag:
       echo "Promoting image ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA} to tags: ${RELEASE_TAGS}"
       docker buildx imagetools create ${TAGS} "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
   rules:
-    - if: $CI_COMMIT_TAG
+    - if: '$CI_PIPELINE_SOURCE != "web" && $CI_PIPELINE_SOURCE != "schedule" && $CI_COMMIT_TAG'
 
 release_master:
   extends: .release_base
@@ -126,7 +223,7 @@ release_master:
       echo "Promoting image ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA} to tags: ${RELEASE_TAGS}"
       docker buildx imagetools create ${TAGS} "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
   rules:
-    - if: $CI_COMMIT_BRANCH == "master"
+    - if: '$CI_PIPELINE_SOURCE != "schedule" && $CI_PIPELINE_SOURCE != "web" && $CI_COMMIT_BRANCH == "master"'
 
 release_feature:
   extends: .release_base
@@ -136,14 +233,14 @@ release_feature:
       echo "Promoting image to feature tag: ${TAG_PREFIX}"
       docker buildx imagetools create --tag "${CI_REGISTRY_IMAGE}:${TAG_PREFIX}" "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /^[0-9]+-.*$/'
+    - if: '$CI_PIPELINE_SOURCE != "web" && $CI_PIPELINE_SOURCE != "schedule" && $CI_COMMIT_BRANCH =~ /^[0-9]+-.*$/'
 
 release_nonstd:
   extends: .release_base
   script:
     - |
-      TAG_NAME="${CI_COMMIT_REF_NAME:0:128}"
+      TAG_NAME="${CI_COMMIT_REF_SLUG}"
       echo "Promoting image to branch tag: ${TAG_NAME}"
       docker buildx imagetools create --tag "${CI_REGISTRY_IMAGE}:${TAG_NAME}" "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /^[a-zA-Z]+.*$/ && $CI_COMMIT_BRANCH != "master" && $CI_COMMIT_BRANCH != "dev"'
+    - if: '$CI_PIPELINE_SOURCE != "web" && $CI_PIPELINE_SOURCE != "schedule" && $CI_COMMIT_BRANCH =~ /^[a-zA-Z]+.*$/ && $CI_COMMIT_BRANCH != "master" && $CI_COMMIT_BRANCH != "dev"'
