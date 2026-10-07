@@ -140,6 +140,7 @@ test_ansible:
   image: "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
   before_script: []
   script:
+    - sh ci/test-ansible-version-newer.sh
     - expected="$(sed -n 's/^ANSIBLE_VERSION=//p' versions.env)"
     - actual="$(python3 -c 'import importlib.metadata as m; print(m.version("ansible"))')"
     - test "${actual}" = "${expected}"
@@ -190,7 +191,7 @@ test_trivy:
 release_tag:
   extends: .release_base
   variables:
-    RELEASE_TAGS: "${CI_COMMIT_TAG} latest"
+    RELEASE_TAGS: "${CI_COMMIT_TAG}"
   script:
     - |
       DOCKER_HUB_IMAGE="${DU_REGISTRY_IMAGE:-pad92/ansible-alpine}"
@@ -208,20 +209,41 @@ release_tag:
 
 release_master:
   extends: .release_base
+  resource_group: ansible-latest-release
   script:
     - |
       . ./versions.env
-      RELEASE_TAGS="${ANSIBLE_VERSION}"
       DOCKER_HUB_IMAGE="${DU_REGISTRY_IMAGE:-pad92/ansible-alpine}"
-      TAGS=""
-      for tag in ${RELEASE_TAGS}; do
-        TAGS="${TAGS} --tag ${CI_REGISTRY_IMAGE}:${tag}"
-        if [ -n "${DOCKER_HUB_USER}" ] && [ -n "${DOCKER_HUB_PASSWORD}" ]; then
-          TAGS="${TAGS} --tag ${DOCKER_HUB_IMAGE}:${tag}"
+      SOURCE_IMAGE="${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+
+      echo "Promoting ${SOURCE_IMAGE} to Ansible tag ${ANSIBLE_VERSION}"
+      docker buildx imagetools create --tag "${CI_REGISTRY_IMAGE}:${ANSIBLE_VERSION}" "${SOURCE_IMAGE}"
+      if [ -n "${DOCKER_HUB_USER}" ] && [ -n "${DOCKER_HUB_PASSWORD}" ]; then
+        docker buildx imagetools create --tag "${DOCKER_HUB_IMAGE}:${ANSIBLE_VERSION}" "${SOURCE_IMAGE}"
+      fi
+
+      promote_latest_if_newer() {
+        image="$1"
+        current_version="$(docker run --rm --entrypoint python3 "${image}:latest" \
+          -c 'import importlib.metadata as m; print(m.version("ansible"))')"
+
+        if sh ci/is-ansible-version-newer.sh "${ANSIBLE_VERSION}" "${current_version}"; then
+          echo "Updating ${image}:latest from Ansible ${current_version} to ${ANSIBLE_VERSION}"
+          docker buildx imagetools create --tag "${image}:latest" "${SOURCE_IMAGE}"
+        else
+          compare_status=$?
+          if [ "${compare_status}" -ne 1 ]; then
+            echo "Unable to compare Ansible versions for ${image}:latest" >&2
+            exit "${compare_status}"
+          fi
+          echo "Keeping ${image}:latest at Ansible ${current_version}; ${ANSIBLE_VERSION} is not newer"
         fi
-      done
-      echo "Promoting image ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA} to tags: ${RELEASE_TAGS}"
-      docker buildx imagetools create ${TAGS} "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+      }
+
+      promote_latest_if_newer "${CI_REGISTRY_IMAGE}"
+      if [ -n "${DOCKER_HUB_USER}" ] && [ -n "${DOCKER_HUB_PASSWORD}" ]; then
+        promote_latest_if_newer "${DOCKER_HUB_IMAGE}"
+      fi
   rules:
     - if: '$CI_PIPELINE_SOURCE != "schedule" && $CI_PIPELINE_SOURCE != "web" && $CI_COMMIT_BRANCH == "master"'
 
