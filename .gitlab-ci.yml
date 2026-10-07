@@ -59,7 +59,7 @@ build_image:
       grep -q '^ARG ANSIBLE_CORE_VERSION$' Dockerfile
       grep -q '^ARG ANSIBLE_LINT_VERSION$' Dockerfile
       grep -q '^ARG MITOGEN_VERSION$' Dockerfile
-      docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+      docker run --privileged multiarch/qemu-user-static --reset -p yes
       docker buildx create --driver docker-container --use
       docker buildx build \
         --provenance=false \
@@ -114,7 +114,7 @@ build_manual_ansible:
       if [ -n "${DOCKER_HUB_PASSWORD:-}" ] && [ -n "${DOCKER_HUB_USER:-}" ]; then
         printf '%s' "${DOCKER_HUB_PASSWORD}" | docker login --username "${DOCKER_HUB_USER}" --password-stdin
       fi
-      docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+      docker run --privileged multiarch/qemu-user-static --reset -p yes
       docker buildx create --driver docker-container --use
       docker buildx build \
         --provenance=false \
