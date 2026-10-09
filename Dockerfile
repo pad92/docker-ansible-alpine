@@ -52,10 +52,14 @@ RUN apk add --no-cache \
         ansible-core==${ANSIBLE_CORE_VERSION} \
         ansible-lint==${ANSIBLE_LINT_VERSION} \
         mitogen==${MITOGEN_VERSION} \
+        'msgpack>=1.2.1' \
+        'setuptools>=78.1.1' \
+        'urllib3>=2.8.0' \
   && apk del .build-deps \
   && rm -rf /var/cache/apk/* \
   && find /usr/lib/ "${VIRTUAL_ENV}/lib" -type d -name '__pycache__' -prune -print0 | xargs -0 rm -rf \
-  && find /usr/lib/ "${VIRTUAL_ENV}/lib" -type f -name '*.py[co]' -print0 | xargs -0 rm -f
+  && find /usr/lib/ "${VIRTUAL_ENV}/lib" -type f -name '*.py[co]' -print0 | xargs -0 rm -f \
+  && find "${VIRTUAL_ENV}/lib" -path '*/pip/_vendor/bom.cdx.json' -delete
 
 RUN mkdir -p /etc/ansible \
   && echo 'localhost' > /etc/ansible/hosts \

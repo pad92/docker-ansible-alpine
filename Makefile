@@ -112,15 +112,17 @@ test-trivy: build
 		-e TRIVY_PASSWORD="$(CI_JOB_TOKEN)" \
 		-v "/var/run/docker.sock:/var/run/docker.sock" \
 		-v "$(CURDIR)/trivy-cache:/root/.cache" \
+		-v "$(CURDIR)/trivy-secret.yaml:/trivy-secret.yaml:ro" \
 		aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f image \
-			--exit-code 1 --severity CRITICAL --no-progress "$(CI_REGISTRY_IMAGE):$(IMAGE_TAG)"
+			--secret-config /trivy-secret.yaml --exit-code 1 --severity CRITICAL --no-progress "$(CI_REGISTRY_IMAGE):$(IMAGE_TAG)"
 	docker run --rm \
 		-e TRIVY_USERNAME="$(CI_REGISTRY_USER)" \
 		-e TRIVY_PASSWORD="$(CI_JOB_TOKEN)" \
 		-v "/var/run/docker.sock:/var/run/docker.sock" \
 		-v "$(CURDIR)/trivy-cache:/root/.cache" \
+		-v "$(CURDIR)/trivy-secret.yaml:/trivy-secret.yaml:ro" \
 		aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f image \
-			--exit-code 1 --severity HIGH --no-progress "$(CI_REGISTRY_IMAGE):$(IMAGE_TAG)"
+			--secret-config /trivy-secret.yaml --exit-code 1 --severity HIGH --no-progress "$(CI_REGISTRY_IMAGE):$(IMAGE_TAG)"
 
 # Cleanup local buildx configurations
 clean:
