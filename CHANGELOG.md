@@ -5,16 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2026-10-09]
+
+### Changed
+- Install Python packages in a virtual environment to comply with PEP 668.
+- Skip Python bytecode compilation during package installation to reduce image size.
+- Exclude known placeholder examples from Trivy secret findings while keeping secret scanning enabled.
+- Use patched msgpack, setuptools, and urllib3 releases, and remove pip's stale bundled SBOM.
+- Remove Alpine's system `py3-pip` and `py3-cryptography` packages after installing the venv dependencies.
+- Upgrade the pinned Trivy scanner image to `0.75.0`.
+
+## [2026-10-07]
 
 ### Changed
 - Upgrade the Alpine base image to `3.24.2` and pin its multi-platform digest.
 - Upgrade Ansible to `14.5.0` with `ansible-core` `2.21.5`.
 - Upgrade `ansible-lint` to `26.9.0` and Mitogen to `0.3.53`.
-- Install Python packages in a virtual environment to comply with PEP 668.
-- Skip Python bytecode compilation during package installation to reduce image size.
-- Exclude known placeholder examples from Trivy secret findings while keeping secret scanning enabled.
-- Use patched msgpack, setuptools, and urllib3 releases, and remove pip's stale bundled SBOM.
 - Keep `latest` on the highest Ansible version. Git tag pipelines no longer
   move it backwards.
 

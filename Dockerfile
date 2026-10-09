@@ -55,7 +55,8 @@ RUN apk add --no-cache \
         'msgpack>=1.2.1' \
         'setuptools>=78.1.1' \
         'urllib3>=2.8.0' \
-  && apk del .build-deps \
+  && apk del .build-deps py3-cryptography py3-pip \
+  && pip3 --version \
   && rm -rf /var/cache/apk/* \
   && find /usr/lib/ "${VIRTUAL_ENV}/lib" -type d -name '__pycache__' -prune -print0 | xargs -0 rm -rf \
   && find /usr/lib/ "${VIRTUAL_ENV}/lib" -type f -name '*.py[co]' -print0 | xargs -0 rm -f \
