@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Upgrade the Alpine base image to `3.24.2` and pin its multi-platform digest.
 - Upgrade Ansible to `14.5.0` with `ansible-core` `2.21.5`.
 - Upgrade `ansible-lint` to `26.9.0` and Mitogen to `0.3.53`.
+- Install Python packages in a virtual environment to comply with PEP 668.
+- Skip Python bytecode compilation during package installation to reduce image size.
 - Keep `latest` on the highest Ansible version. Git tag pipelines no longer
   move it backwards.
 

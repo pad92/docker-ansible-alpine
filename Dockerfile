@@ -21,8 +21,8 @@ LABEL org.opencontainers.image.authors="Pascal A. <pascalito@gmail.com>" \
       org.opencontainers.image.description="Ansible on Alpine Docker image" \
       org.opencontainers.image.licenses="GPL-3.0-or-later"
 
-# PEP 668 compatibility (allows installing pip packages globally on Alpine 3.20+)
-ENV PIP_BREAK_SYSTEM_PACKAGES=1
+ENV VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:${PATH}"
 
 RUN apk add --no-cache \
         ca-certificates \
@@ -36,26 +36,26 @@ RUN apk add --no-cache \
         py3-yaml \
         python3 \
         rsync \
-        sshpass
-
-RUN apk add --no-cache --virtual .build-deps \
+        sshpass \
+  && apk add --no-cache --virtual .build-deps \
         build-base \
         libffi-dev \
         openssl-dev \
         python3-dev \
+  && python3 -m venv --system-site-packages "${VIRTUAL_ENV}" \
   && test -n "${ANSIBLE_VERSION}" \
   && test -n "${ANSIBLE_CORE_VERSION}" \
   && test -n "${ANSIBLE_LINT_VERSION}" \
   && test -n "${MITOGEN_VERSION}" \
-  && pip3 install --no-cache-dir \
+  && pip3 install --no-cache-dir --no-compile \
         ansible==${ANSIBLE_VERSION} \
         ansible-core==${ANSIBLE_CORE_VERSION} \
         ansible-lint==${ANSIBLE_LINT_VERSION} \
         mitogen==${MITOGEN_VERSION} \
   && apk del .build-deps \
   && rm -rf /var/cache/apk/* \
-  && find /usr/lib/ -name '__pycache__' -print0 | xargs -0 -n1 rm -rf \
-  && find /usr/lib/ -name '*.pyc' -print0 | xargs -0 -n1 rm -rf
+  && find /usr/lib/ "${VIRTUAL_ENV}/lib" -type d -name '__pycache__' -prune -print0 | xargs -0 rm -rf \
+  && find /usr/lib/ "${VIRTUAL_ENV}/lib" -type f -name '*.py[co]' -print0 | xargs -0 rm -f
 
 RUN mkdir -p /etc/ansible \
   && echo 'localhost' > /etc/ansible/hosts \
