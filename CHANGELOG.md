@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Skip Python bytecode compilation during package installation to reduce image size.
 - Exclude known placeholder examples from Trivy secret findings while keeping secret scanning enabled.
 - Use patched msgpack, setuptools, and urllib3 releases, and remove pip's stale bundled SBOM.
+- Remove Alpine's system `py3-pip` and `py3-cryptography` packages after installing the venv dependencies.
+- Upgrade the pinned Trivy scanner image to `0.75.0`.
 - Update `latest` when a new build has the same Ansible version as the current tag.
 
 ## [2026-10-07]
