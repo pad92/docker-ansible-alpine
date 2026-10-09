@@ -223,10 +223,21 @@ release_master:
 
       promote_latest_if_not_older() {
         image="$1"
-        current_version="$(docker run --rm --entrypoint python3 "${image}:latest" \
-          -c 'import importlib.metadata as m; print(m.version("ansible"))')"
+        if latest_manifest="$(docker buildx imagetools inspect "${image}:latest" 2>&1)"; then
+          current_version="$(docker run --rm --entrypoint python3 "${image}:latest" \
+            -c 'import importlib.metadata as m; print(m.version("ansible"))')"
+        elif printf '%s\n' "${latest_manifest}" | grep -Eqi 'manifest unknown|no such manifest'; then
+          echo "No ${image}:latest tag exists; promoting ${SOURCE_IMAGE}"
+          docker buildx imagetools create --tag "${image}:latest" "${SOURCE_IMAGE}"
+          return
+        else
+          echo "Unable to inspect ${image}:latest: ${latest_manifest}" >&2
+          return 1
+        fi
 
-        if sh ci/is-ansible-version-at-least.sh "${ANSIBLE_VERSION}" "${current_version}"; then
+        if [ "${ANSIBLE_VERSION}" = "${current_version}" ]; then
+          echo "Keeping ${image}:latest at Ansible ${current_version}; the candidate has the same version"
+        elif sh ci/is-ansible-version-at-least.sh "${ANSIBLE_VERSION}" "${current_version}"; then
           echo "Promoting ${SOURCE_IMAGE} to ${image}:latest (Ansible ${ANSIBLE_VERSION}; current latest: ${current_version})"
           docker buildx imagetools create --tag "${image}:latest" "${SOURCE_IMAGE}"
         else
