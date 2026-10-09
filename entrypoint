@@ -59,7 +59,7 @@ if [ -z "${PIP_REQUIREMENTS:-}" ]; then
 fi
 
 if [ -f "$PIP_REQUIREMENTS" ]; then
-    if ! pip3 install --upgrade -r "$PIP_REQUIREMENTS"; then
+    if ! pip3 install --no-compile --upgrade -r "$PIP_REQUIREMENTS"; then
         echo "pip requirements installation failed" >&2
         exit 1
     fi

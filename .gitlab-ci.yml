@@ -175,8 +175,8 @@ test_trivy:
     paths:
       - trivy-cache/
   script:
-    - trivy image --cache-dir "${TRIVY_CACHE_DIR}" --exit-code 1 --severity CRITICAL --no-progress "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
-    - trivy image --cache-dir "${TRIVY_CACHE_DIR}" --exit-code 1 --severity HIGH --no-progress "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+    - trivy image --cache-dir "${TRIVY_CACHE_DIR}" --secret-config "${CI_PROJECT_DIR}/trivy-secret.yaml" --exit-code 1 --severity CRITICAL --no-progress "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+    - trivy image --cache-dir "${TRIVY_CACHE_DIR}" --secret-config "${CI_PROJECT_DIR}/trivy-secret.yaml" --exit-code 1 --severity HIGH --no-progress "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
 
 .release_base:
   stage: release
