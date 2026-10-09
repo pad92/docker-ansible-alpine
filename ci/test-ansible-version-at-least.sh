@@ -2,18 +2,18 @@
 
 set -eu
 
-compare="$(dirname "$0")/is-ansible-version-newer.sh"
+compare="$(dirname "$0")/is-ansible-version-at-least.sh"
 
-assert_newer() {
+assert_at_least() {
     if ! sh "$compare" "$1" "$2"; then
-        echo "Expected $1 to be newer than $2" >&2
+        echo "Expected $1 to be at least $2" >&2
         exit 1
     fi
 }
 
-assert_not_newer() {
+assert_older() {
     if sh "$compare" "$1" "$2"; then
-        echo "Expected $1 not to be newer than $2" >&2
+        echo "Expected $1 to be older than $2" >&2
         exit 1
     else
         status=$?
@@ -37,11 +37,11 @@ assert_invalid() {
     fi
 }
 
-assert_newer 14.5.0 13.99.99
-assert_newer 14.5.1 14.5.0
-assert_not_newer 14.5.0 14.5.0
-assert_not_newer 14.4.9 14.5.0
+assert_at_least 14.5.0 13.99.99
+assert_at_least 14.5.1 14.5.0
+assert_at_least 14.5.0 14.5.0
+assert_older 14.4.9 14.5.0
 assert_invalid 14.5 14.4.0
 assert_invalid 14.5.0-rc1 14.4.0
 
-echo "Ansible version comparison tests passed"
+echo "Ansible latest-promotion comparison tests passed"

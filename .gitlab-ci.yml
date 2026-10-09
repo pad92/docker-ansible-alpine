@@ -139,7 +139,7 @@ test_ansible:
   image: "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
   before_script: []
   script:
-    - sh ci/test-ansible-version-newer.sh
+    - sh ci/test-ansible-version-at-least.sh
     - expected="$(sed -n 's/^ANSIBLE_VERSION=//p' versions.env)"
     - actual="$(python3 -c 'import importlib.metadata as m; print(m.version("ansible"))')"
     - test "${actual}" = "${expected}"
@@ -221,13 +221,13 @@ release_master:
         docker buildx imagetools create --tag "${DOCKER_HUB_IMAGE}:${ANSIBLE_VERSION}" "${SOURCE_IMAGE}"
       fi
 
-      promote_latest_if_newer() {
+      promote_latest_if_not_older() {
         image="$1"
         current_version="$(docker run --rm --entrypoint python3 "${image}:latest" \
           -c 'import importlib.metadata as m; print(m.version("ansible"))')"
 
-        if sh ci/is-ansible-version-newer.sh "${ANSIBLE_VERSION}" "${current_version}"; then
-          echo "Updating ${image}:latest from Ansible ${current_version} to ${ANSIBLE_VERSION}"
+        if sh ci/is-ansible-version-at-least.sh "${ANSIBLE_VERSION}" "${current_version}"; then
+          echo "Promoting ${SOURCE_IMAGE} to ${image}:latest (Ansible ${ANSIBLE_VERSION}; current latest: ${current_version})"
           docker buildx imagetools create --tag "${image}:latest" "${SOURCE_IMAGE}"
         else
           compare_status=$?
@@ -239,9 +239,9 @@ release_master:
         fi
       }
 
-      promote_latest_if_newer "${CI_REGISTRY_IMAGE}"
+      promote_latest_if_not_older "${CI_REGISTRY_IMAGE}"
       if [ -n "${DOCKER_HUB_USER}" ] && [ -n "${DOCKER_HUB_PASSWORD}" ]; then
-        promote_latest_if_newer "${DOCKER_HUB_IMAGE}"
+        promote_latest_if_not_older "${DOCKER_HUB_IMAGE}"
       fi
   rules:
     - if: '$CI_PIPELINE_SOURCE != "schedule" && $CI_PIPELINE_SOURCE != "web" && $CI_COMMIT_BRANCH == "master"'

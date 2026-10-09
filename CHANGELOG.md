@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Skip Python bytecode compilation during package installation to reduce image size.
 - Exclude known placeholder examples from Trivy secret findings while keeping secret scanning enabled.
 - Use patched msgpack, setuptools, and urllib3 releases, and remove pip's stale bundled SBOM.
+- Update `latest` when a new build has the same Ansible version as the current tag.
 - Keep `latest` on the highest Ansible version. Git tag pipelines no longer
   move it backwards.
 
