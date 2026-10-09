@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use patched msgpack, setuptools, and urllib3 releases, and remove pip's stale bundled SBOM.
 - Remove Alpine's system `py3-pip` and `py3-cryptography` packages after installing the venv dependencies.
 - Upgrade the pinned Trivy scanner image to `0.75.0`.
+- Update `latest` when a new build has the same Ansible version as the current tag.
 
 ## [2026-10-07]
 
@@ -21,8 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Upgrade the Alpine base image to `3.24.2` and pin its multi-platform digest.
 - Upgrade Ansible to `14.5.0` with `ansible-core` `2.21.5`.
 - Upgrade `ansible-lint` to `26.9.0` and Mitogen to `0.3.53`.
-- Keep `latest` on the highest Ansible version. Git tag pipelines no longer
-  move it backwards.
+- Keep `latest` on the highest Ansible version; Git tag pipelines no longer move it backwards.
 
 ## [13.7.0] - 2026-06-16
 

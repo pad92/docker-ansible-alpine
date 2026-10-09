@@ -31,6 +31,6 @@ awk -v candidate="$1" -v current="$2" '
             }
         }
 
-        exit 1
+        exit 0
     }
 '
