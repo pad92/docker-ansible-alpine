@@ -49,32 +49,8 @@ build_image:
   script:
     - |
       . ./versions.env
-      test -n "${ALPINE_IMAGE}"
-      test -n "${ANSIBLE_VERSION}"
-      test -n "${ANSIBLE_CORE_VERSION}"
-      test -n "${ANSIBLE_LINT_VERSION}"
-      test -n "${MITOGEN_VERSION}"
-      grep -q '^ARG ANSIBLE_VERSION$' Dockerfile
-      grep -q '^ARG ANSIBLE_CORE_VERSION$' Dockerfile
-      grep -q '^ARG ANSIBLE_LINT_VERSION$' Dockerfile
-      grep -q '^ARG MITOGEN_VERSION$' Dockerfile
-      docker run --privileged multiarch/qemu-user-static --reset -p yes
-      docker buildx create --driver docker-container --use
-      docker buildx build \
-        --provenance=false \
-        --pull \
-        --push \
-        --build-arg ALPINE_IMAGE="${ALPINE_IMAGE}" \
-        --build-arg ANSIBLE_VERSION="${ANSIBLE_VERSION}" \
-        --build-arg ANSIBLE_CORE_VERSION="${ANSIBLE_CORE_VERSION}" \
-        --build-arg ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}" \
-        --build-arg MITOGEN_VERSION="${MITOGEN_VERSION}" \
-        --build-arg BUILD_NAME="${CI_PROJECT_NAME}" \
-        --build-arg BUILD_DATE="$(date '+%FT%T.%s%z')" \
-        --build-arg BUILD_VCSREF="${CI_COMMIT_SHA:0:8}" \
-        --platform=linux/amd64,linux/arm64 \
-        -t "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}" \
-        .
+      export ALPINE_IMAGE ANSIBLE_VERSION ANSIBLE_CORE_VERSION ANSIBLE_LINT_VERSION MITOGEN_VERSION
+      ./ci/build-image.sh "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
 
 build_manual_ansible:
   stage: build
@@ -112,25 +88,18 @@ build_manual_ansible:
       printf '%s' "${CI_JOB_TOKEN}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
       if [ -n "${DOCKER_HUB_PASSWORD:-}" ] && [ -n "${DOCKER_HUB_USER:-}" ]; then
         printf '%s' "${DOCKER_HUB_PASSWORD}" | docker login --username "${DOCKER_HUB_USER}" --password-stdin
+      else
+        echo "DOCKER_HUB_USER and DOCKER_HUB_PASSWORD must be configured to publish to Docker Hub" >&2
+        exit 1
       fi
-      docker run --privileged multiarch/qemu-user-static --reset -p yes
-      docker buildx create --driver docker-container --use
-      docker buildx build \
-        --provenance=false \
-        --pull \
-        --push \
-        --platform=linux/amd64,linux/arm64 \
-        --build-arg ALPINE_IMAGE="${ALPINE_IMAGE}" \
-        --build-arg ANSIBLE_VERSION="${MANUAL_ANSIBLE_VERSION}" \
-        --build-arg ANSIBLE_CORE_VERSION="${manual_core_version}" \
-        --build-arg ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}" \
-        --build-arg MITOGEN_VERSION="${MITOGEN_VERSION}" \
-        --build-arg BUILD_NAME="${CI_PROJECT_NAME}" \
-        --build-arg BUILD_DATE="$(date '+%FT%T.%s%z')" \
-        --build-arg BUILD_VCSREF="${CI_COMMIT_SHA:0:8}" \
-        -t "${CI_REGISTRY_IMAGE}:${manual_image_tag}" \
-        .
-      echo "Image published: ${CI_REGISTRY_IMAGE}:${manual_image_tag}"
+      docker_hub_image="${DU_REGISTRY_IMAGE:-pad92/ansible-alpine}"
+      ANSIBLE_VERSION="${MANUAL_ANSIBLE_VERSION}"
+      ANSIBLE_CORE_VERSION="${manual_core_version}"
+      export ALPINE_IMAGE ANSIBLE_VERSION ANSIBLE_CORE_VERSION ANSIBLE_LINT_VERSION MITOGEN_VERSION
+      ./ci/build-image.sh \
+        "${CI_REGISTRY_IMAGE}:${manual_image_tag}" \
+        "${docker_hub_image}:${manual_image_tag}"
+      echo "Image published: ${CI_REGISTRY_IMAGE}:${manual_image_tag} and ${docker_hub_image}:${manual_image_tag}"
 
 test_ansible:
   stage: test
