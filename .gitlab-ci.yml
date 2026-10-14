@@ -42,15 +42,60 @@ check_ansible_release:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
 
+.build_image_function:
+  script:
+    - |
+      build_image() {
+        if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+          echo "Usage: build_image <image:tag> [<image:tag>]" >&2
+          return 2
+        fi
+        image_tag_1="$1"
+        image_tag_2="${2:-}"
+
+        test -n "${ALPINE_IMAGE:-}"
+        test -n "${ANSIBLE_VERSION:-}"
+        test -n "${ANSIBLE_CORE_VERSION:-}"
+        test -n "${ANSIBLE_LINT_VERSION:-}"
+        test -n "${MITOGEN_VERSION:-}"
+        grep -q '^ARG ANSIBLE_VERSION$' Dockerfile
+        grep -q '^ARG ANSIBLE_CORE_VERSION$' Dockerfile
+        grep -q '^ARG ANSIBLE_LINT_VERSION$' Dockerfile
+        grep -q '^ARG MITOGEN_VERSION$' Dockerfile
+
+        docker run --privileged multiarch/qemu-user-static --reset -p yes
+        docker buildx create --driver docker-container --use
+
+        set -- docker buildx build \
+          --provenance=false \
+          --pull \
+          --push \
+          --build-arg "ALPINE_IMAGE=${ALPINE_IMAGE}" \
+          --build-arg "ANSIBLE_VERSION=${ANSIBLE_VERSION}" \
+          --build-arg "ANSIBLE_CORE_VERSION=${ANSIBLE_CORE_VERSION}" \
+          --build-arg "ANSIBLE_LINT_VERSION=${ANSIBLE_LINT_VERSION}" \
+          --build-arg "MITOGEN_VERSION=${MITOGEN_VERSION}" \
+          --build-arg "BUILD_NAME=${CI_PROJECT_NAME}" \
+          --build-arg "BUILD_DATE=$(date '+%FT%T.%s%z')" \
+          --build-arg "BUILD_VCSREF=$(printf '%s' "${CI_COMMIT_SHA}" | cut -c1-8)" \
+          --platform=linux/amd64,linux/arm64
+
+        set -- "$@" --tag "$image_tag_1"
+        if [ -n "${image_tag_2}" ]; then
+          set -- "$@" --tag "$image_tag_2"
+        fi
+        "$@" .
+      }
+
 build_image:
   stage: build
   rules:
     - if: '$CI_PIPELINE_SOURCE != "schedule" && $CI_PIPELINE_SOURCE != "web"'
   script:
-    - |
-      . ./versions.env
-      export ALPINE_IMAGE ANSIBLE_VERSION ANSIBLE_CORE_VERSION ANSIBLE_LINT_VERSION MITOGEN_VERSION
-      ./ci/build-image.sh "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+    - !reference [.build_image_function, script]
+    - . ./versions.env
+    - export ALPINE_IMAGE ANSIBLE_VERSION ANSIBLE_CORE_VERSION ANSIBLE_LINT_VERSION MITOGEN_VERSION
+    - build_image "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
 
 build_manual_ansible:
   stage: build
@@ -61,6 +106,7 @@ build_manual_ansible:
       allow_failure: false
     - when: never
   script:
+    - !reference [.build_image_function, script]
     - apk add --no-cache curl jq
     - test -n "${MANUAL_ANSIBLE_VERSION:-}" || (echo "Set MANUAL_ANSIBLE_VERSION before starting this job" >&2; exit 1)
     - . ./versions.env
@@ -96,7 +142,7 @@ build_manual_ansible:
       ANSIBLE_VERSION="${MANUAL_ANSIBLE_VERSION}"
       ANSIBLE_CORE_VERSION="${manual_core_version}"
       export ALPINE_IMAGE ANSIBLE_VERSION ANSIBLE_CORE_VERSION ANSIBLE_LINT_VERSION MITOGEN_VERSION
-      ./ci/build-image.sh \
+      build_image \
         "${CI_REGISTRY_IMAGE}:${manual_image_tag}" \
         "${docker_hub_image}:${manual_image_tag}"
       echo "Image published: ${CI_REGISTRY_IMAGE}:${manual_image_tag} and ${docker_hub_image}:${manual_image_tag}"
