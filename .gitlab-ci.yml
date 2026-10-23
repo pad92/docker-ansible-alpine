@@ -7,6 +7,13 @@ default:
   tags:
     - chataigne
 
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - when: always
+
 variables:
   MANUAL_ANSIBLE_VERSION:
     value: "13.7.0"
@@ -16,7 +23,7 @@ variables:
     description: "Override ansible-core ; vide pour la résolution automatique."
   MANUAL_IMAGE_TAG:
     value: ""
-    description: "Tag Docker ; vide pour ansible-<version>-<commit>."
+    description: "Suffixe du tag manual- ; vide pour <version>-<commit>."
 
 stages:
 - automation
@@ -34,13 +41,46 @@ before_script:
 check_ansible_release:
   stage: automation
   resource_group: ansible-release-check
-  image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+  image: alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
   before_script:
     - apk add --no-cache coreutils curl jq
   script:
     - ./ci/check-ansible-release.sh
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+check_trivy_release:
+  stage: automation
+  services: []
+  resource_group: trivy-release-check
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - sh ci/check-trivy-release.sh
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+check_alpine_release:
+  stage: automation
+  services: []
+  resource_group: alpine-release-check
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - sh ci/check-alpine-release.sh
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+validate_ci:
+  stage: automation
+  image: alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+  services: []
+  before_script:
+    - apk add --no-cache make python3 py3-yaml jq shellcheck git
+  script:
+    - make test-ci
+  rules:
+    - if: '$CI_PIPELINE_SOURCE != "schedule"'
 
 .build_image_function:
   script:
@@ -67,6 +107,7 @@ check_ansible_release:
         docker buildx create --driver docker-container --use
 
         set -- docker buildx build \
+          --metadata-file build-metadata.json \
           --provenance=false \
           --pull \
           --push \
@@ -77,7 +118,8 @@ check_ansible_release:
           --build-arg "MITOGEN_VERSION=${MITOGEN_VERSION}" \
           --build-arg "BUILD_NAME=${CI_PROJECT_NAME}" \
           --build-arg "BUILD_DATE=$(date '+%FT%T.%s%z')" \
-          --build-arg "BUILD_VCSREF=$(printf '%s' "${CI_COMMIT_SHA}" | cut -c1-8)" \
+          --build-arg "BUILD_VCSREF=${CI_COMMIT_SHA}" \
+          --build-arg "BUILD_PIPELINE_ID=${CI_PIPELINE_ID}" \
           --platform=linux/amd64,linux/arm64
 
         set -- "$@" --tag "$image_tag_1"
@@ -95,7 +137,15 @@ build_image:
     - !reference [.build_image_function, script]
     - . ./versions.env
     - export ALPINE_IMAGE ANSIBLE_VERSION ANSIBLE_CORE_VERSION ANSIBLE_LINT_VERSION MITOGEN_VERSION
-    - build_image "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+    - apk add --no-cache jq
+    - build_image "${CI_REGISTRY_IMAGE}:ci-${CI_PIPELINE_ID}-${CI_JOB_ID}"
+    - digest=$(jq -er '."containerimage.digest" | select(test("^sha256:[a-f0-9]{64}$"))' build-metadata.json)
+    - printf 'TESTED_IMAGE=%s@%s\n' "$CI_REGISTRY_IMAGE" "$digest" > image.env
+  artifacts:
+    reports:
+      dotenv: image.env
+    paths:
+      - build-metadata.json
 
 build_manual_ansible:
   stage: build
@@ -123,7 +173,7 @@ build_manual_ansible:
         echo "Unable to determine a compatible ansible-core for ${MANUAL_ANSIBLE_VERSION}" >&2
         exit 1
       }
-      manual_image_tag="${MANUAL_IMAGE_TAG:-ansible-${MANUAL_ANSIBLE_VERSION}-${CI_COMMIT_SHORT_SHA}}"
+      manual_image_tag="manual-${MANUAL_IMAGE_TAG:-${MANUAL_ANSIBLE_VERSION}-${CI_COMMIT_SHORT_SHA}}"
       case "${manual_image_tag}" in
         ''|*[!a-zA-Z0-9_.-]*)
           echo "MANUAL_IMAGE_TAG contains unsupported characters" >&2
@@ -151,34 +201,42 @@ test_ansible:
   stage: test
   rules:
     - if: '$CI_PIPELINE_SOURCE != "schedule" && $CI_PIPELINE_SOURCE != "web"'
-  image: "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
-  before_script: []
   script:
     - sh ci/test-ansible-version-at-least.sh
     - expected="$(sed -n 's/^ANSIBLE_VERSION=//p' versions.env)"
-    - actual="$(python3 -c 'import importlib.metadata as m; print(m.version("ansible"))')"
+    - actual="$(docker run --rm --entrypoint python3 "$TESTED_IMAGE" -c 'import importlib.metadata as m; print(m.version("ansible"))')"
     - test "${actual}" = "${expected}"
     - expected_core="$(sed -n 's/^ANSIBLE_CORE_VERSION=//p' versions.env)"
-    - actual_core="$(python3 -c 'import importlib.metadata as m; print(m.version("ansible-core"))')"
+    - actual_core="$(docker run --rm --entrypoint python3 "$TESTED_IMAGE" -c 'import importlib.metadata as m; print(m.version("ansible-core"))')"
     - test "${actual_core}" = "${expected_core}"
-    - ansible --version
-    - ansible-lint --version
+    - docker run --rm "$TESTED_IMAGE" ansible --version
+    - docker run --rm "$TESTED_IMAGE" ansible-lint --version
+    - mkdir -p validation
+    - printf '%s\n' "$TESTED_IMAGE" > validation/ansible.txt
+  artifacts:
+    paths: [validation/ansible.txt]
 
 test_mitogen:
   stage: test
   rules:
     - if: '$CI_PIPELINE_SOURCE != "schedule" && $CI_PIPELINE_SOURCE != "web"'
-  image: "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
-  before_script: []
   script:
-    - python3 -c "import ansible_mitogen"
+    - docker run --rm --entrypoint python3 "$TESTED_IMAGE" -c "import ansible_mitogen"
+    - mkdir -p validation
+    - printf '%s\n' "$TESTED_IMAGE" > validation/mitogen.txt
+  artifacts:
+    paths: [validation/mitogen.txt]
 
 test_trivy:
   stage: test
+  services: []
+  parallel:
+    matrix:
+      - SCAN_PLATFORM: [linux/amd64, linux/arm64]
   rules:
     - if: '$CI_PIPELINE_SOURCE != "schedule" && $CI_PIPELINE_SOURCE != "web"'
   image:
-    name: aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
+    name: aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
     entrypoint: [""]
   before_script: []
   variables:
@@ -190,8 +248,34 @@ test_trivy:
     paths:
       - trivy-cache/
   script:
-    - trivy image --cache-dir "${TRIVY_CACHE_DIR}" --secret-config "${CI_PROJECT_DIR}/trivy-secret.yaml" --exit-code 1 --severity CRITICAL --no-progress "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
-    - trivy image --cache-dir "${TRIVY_CACHE_DIR}" --secret-config "${CI_PROJECT_DIR}/trivy-secret.yaml" --exit-code 1 --severity HIGH --no-progress "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+    - trivy image --cache-dir "${TRIVY_CACHE_DIR}" --secret-config "${CI_PROJECT_DIR}/trivy-secret.yaml" --exit-code 1 --severity HIGH,CRITICAL --no-progress --platform "$SCAN_PLATFORM" "$TESTED_IMAGE"
+    - mkdir -p validation
+    - printf '%s\n' "$TESTED_IMAGE" > "validation/trivy-${SCAN_PLATFORM#linux/}.txt"
+  artifacts:
+    paths: [validation/]
+
+resolve_published:
+  stage: automation
+  services: []
+  script:
+    - . ci/registry.sh
+    - digest=$(registry_digest "${CI_REGISTRY_IMAGE}:latest")
+    - printf 'PUBLISHED_IMAGE=%s@%s\n' "$CI_REGISTRY_IMAGE" "$digest" > published.env
+  artifacts:
+    reports:
+      dotenv: published.env
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+scan_published:
+  extends: test_trivy
+  stage: test
+  needs: [resolve_published]
+  artifacts: null
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+  script:
+    - trivy image --cache-dir "$TRIVY_CACHE_DIR" --secret-config "$CI_PROJECT_DIR/trivy-secret.yaml" --exit-code 1 --severity HIGH,CRITICAL --no-progress --platform "$SCAN_PLATFORM" "$PUBLISHED_IMAGE"
 
 .release_base:
   stage: release
@@ -205,7 +289,7 @@ test_trivy:
 release_tag:
   extends: .release_base
   variables:
-    RELEASE_TAGS: "${CI_COMMIT_TAG}"
+    RELEASE_TAGS: "git-${CI_COMMIT_TAG}"
   script:
     - |
       DOCKER_HUB_IMAGE="${DU_REGISTRY_IMAGE:-pad92/ansible-alpine}"
@@ -216,8 +300,8 @@ release_tag:
           TAGS="${TAGS} --tag ${DOCKER_HUB_IMAGE}:${tag}"
         fi
       done
-      echo "Promoting image ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA} to tags: ${RELEASE_TAGS}"
-      docker buildx imagetools create ${TAGS} "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+      echo "Promoting image ${TESTED_IMAGE} to tags: ${RELEASE_TAGS}"
+      docker buildx imagetools create ${TAGS} "${TESTED_IMAGE}"
   rules:
     - if: '$CI_PIPELINE_SOURCE != "web" && $CI_PIPELINE_SOURCE != "schedule" && $CI_COMMIT_TAG'
 
@@ -225,60 +309,18 @@ release_master:
   extends: .release_base
   resource_group: ansible-latest-release
   script:
-    - |
-      . ./versions.env
-      DOCKER_HUB_IMAGE="${DU_REGISTRY_IMAGE:-pad92/ansible-alpine}"
-      SOURCE_IMAGE="${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
-
-      echo "Promoting ${SOURCE_IMAGE} to Ansible tag ${ANSIBLE_VERSION}"
-      docker buildx imagetools create --tag "${CI_REGISTRY_IMAGE}:${ANSIBLE_VERSION}" "${SOURCE_IMAGE}"
-      if [ -n "${DOCKER_HUB_USER}" ] && [ -n "${DOCKER_HUB_PASSWORD}" ]; then
-        docker buildx imagetools create --tag "${DOCKER_HUB_IMAGE}:${ANSIBLE_VERSION}" "${SOURCE_IMAGE}"
-      fi
-
-      promote_latest_if_not_older() {
-        image="$1"
-        if latest_manifest="$(docker buildx imagetools inspect "${image}:latest" 2>&1)"; then
-          current_version="$(docker run --rm --entrypoint python3 "${image}:latest" \
-            -c 'import importlib.metadata as m; print(m.version("ansible"))')"
-        elif printf '%s\n' "${latest_manifest}" | grep -Eqi 'manifest unknown|no such manifest'; then
-          echo "No ${image}:latest tag exists; promoting ${SOURCE_IMAGE}"
-          docker buildx imagetools create --tag "${image}:latest" "${SOURCE_IMAGE}"
-          return
-        else
-          echo "Unable to inspect ${image}:latest: ${latest_manifest}" >&2
-          return 1
-        fi
-
-        if [ "${ANSIBLE_VERSION}" = "${current_version}" ]; then
-          echo "Keeping ${image}:latest at Ansible ${current_version}; the candidate has the same version"
-        elif sh ci/is-ansible-version-at-least.sh "${ANSIBLE_VERSION}" "${current_version}"; then
-          echo "Promoting ${SOURCE_IMAGE} to ${image}:latest (Ansible ${ANSIBLE_VERSION}; current latest: ${current_version})"
-          docker buildx imagetools create --tag "${image}:latest" "${SOURCE_IMAGE}"
-        else
-          compare_status=$?
-          if [ "${compare_status}" -ne 1 ]; then
-            echo "Unable to compare Ansible versions for ${image}:latest" >&2
-            exit "${compare_status}"
-          fi
-          echo "Keeping ${image}:latest at Ansible ${current_version}; ${ANSIBLE_VERSION} is not newer"
-        fi
-      }
-
-      promote_latest_if_not_older "${CI_REGISTRY_IMAGE}"
-      if [ -n "${DOCKER_HUB_USER}" ] && [ -n "${DOCKER_HUB_PASSWORD}" ]; then
-        promote_latest_if_not_older "${DOCKER_HUB_IMAGE}"
-      fi
+    - apk add --no-cache make jq
+    - make release
   rules:
-    - if: '$CI_PIPELINE_SOURCE != "schedule" && $CI_PIPELINE_SOURCE != "web" && $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE != "schedule" && $CI_PIPELINE_SOURCE != "web" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
 release_feature:
   extends: .release_base
   script:
     - |
-      TAG_PREFIX="${CI_COMMIT_REF_NAME%%-*}"
+      TAG_PREFIX="branch-${CI_COMMIT_REF_SLUG}"
       echo "Promoting image to feature tag: ${TAG_PREFIX}"
-      docker buildx imagetools create --tag "${CI_REGISTRY_IMAGE}:${TAG_PREFIX}" "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+      docker buildx imagetools create --tag "${CI_REGISTRY_IMAGE}:${TAG_PREFIX}" "${TESTED_IMAGE}"
   rules:
     - if: '$CI_PIPELINE_SOURCE != "web" && $CI_PIPELINE_SOURCE != "schedule" && $CI_COMMIT_BRANCH =~ /^[0-9]+-.*$/'
 
@@ -286,8 +328,8 @@ release_nonstd:
   extends: .release_base
   script:
     - |
-      TAG_NAME="${CI_COMMIT_REF_SLUG}"
+      TAG_NAME="branch-${CI_COMMIT_REF_SLUG}"
       echo "Promoting image to branch tag: ${TAG_NAME}"
-      docker buildx imagetools create --tag "${CI_REGISTRY_IMAGE}:${TAG_NAME}" "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+      docker buildx imagetools create --tag "${CI_REGISTRY_IMAGE}:${TAG_NAME}" "${TESTED_IMAGE}"
   rules:
-    - if: '$CI_PIPELINE_SOURCE != "web" && $CI_PIPELINE_SOURCE != "schedule" && $CI_COMMIT_BRANCH =~ /^[a-zA-Z]+.*$/ && $CI_COMMIT_BRANCH != "master" && $CI_COMMIT_BRANCH != "dev"'
+    - if: '$CI_PIPELINE_SOURCE != "web" && $CI_PIPELINE_SOURCE != "schedule" && $CI_COMMIT_BRANCH =~ /^[a-zA-Z]+.*$/ && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_COMMIT_BRANCH != "dev"'

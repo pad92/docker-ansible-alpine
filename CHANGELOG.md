@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-10-23]
+
+### Fixed
+- Make local upstream checks work without GitLab CI variables or a token; scheduled CI checks still create update merge requests.
+- Treat Docker's `not found` response as a missing tag when assigning image revisions.
+
+### Added
+- Check upstream Trivy releases and update the pinned scanner digest through a merge request.
+- Avoid duplicate branch pipelines when a merge request pipeline exists.
+- Expose CI validation, upstream update checks, published-image scans, and the guarded CI release command through Makefile targets.
+- Check Alpine patch versions and digest changes on scheduled pipelines and open update merge requests.
+- Scan the published image on AMD64 and ARM64 during scheduled pipelines.
+- Publish numbered image revisions automatically, with retry handling and obsolete-pipeline checks.
+- Test release and update logic using isolated registry and GitLab API fixtures.
+
+### Changed
+- Pass the built image digest through tests and promotion; update `latest` for newer image revisions at the same Ansible version.
+- Reserve `manual-`, `branch-`, and `git-` prefixes for builds outside the stable release path.
+- Upgrade Alpine to `3.24.3` in the build configuration, Dockerfile default, and release-check CI job.
+- Upgrade Trivy to `0.76.1`, pinned by multi-platform digest, for local and CI scans.
+- Scan HIGH and CRITICAL findings together, keeping vulnerability and secret checks blocking.
+
+### Documentation
+- Document GitLab CI jobs, pipeline flows, and their Makefile equivalents.
+- Move Ansible image usage, configuration, and common commands into a dedicated guide.
+- Document the upstream missing-CVE-details warning, reproduced with a freshly downloaded database.
+
 ## [2026-10-09]
 
 ### Changed
