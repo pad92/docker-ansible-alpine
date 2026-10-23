@@ -1,7 +1,7 @@
 #!/bin/sh
 # Shared registry operations. Callers use set -eu.
 registry_digest() {
-    if registry_result=$(docker buildx imagetools inspect "$1" --format '{{.Manifest.Digest}}' 2>&1); then
+    if registry_result=$(docker buildx imagetools inspect "$1" --format '{{printf "%s" .Manifest.Digest}}' 2>&1); then
         printf '%s\n' "$registry_result" | grep -Eq '^sha256:[a-f0-9]{64}$' || {
             echo "Invalid registry digest for $1" >&2
             return 2
