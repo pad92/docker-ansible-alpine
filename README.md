@@ -1,86 +1,22 @@
 # Docker-Ansible base image
 
-![Pipeline](https://gitlab.com/pad92/docker-ansible-alpine/badges/master/pipeline.svg)
-![version](https://img.shields.io/docker/v/pad92/ansible-alpine?sort=semver)
+[![Pipeline](https://gitlab.com/pad92/docker-ansible-alpine/badges/master/pipeline.svg?ignore_skipped=true)](https://gitlab.com/pad92/docker-ansible-alpine/-/pipelines?ref=master)
+[![Docker image version](https://img.shields.io/docker/v/pad92/ansible-alpine?sort=semver)](https://hub.docker.com/r/pad92/ansible-alpine/tags)
 [![Docker Pulls](https://img.shields.io/docker/pulls/pad92/ansible-alpine)](https://hub.docker.com/r/pad92/ansible-alpine/)
-![Docker Image Size](https://img.shields.io/docker/image-size/pad92/ansible-alpine/latest)
-![Docker Stars](https://img.shields.io/docker/stars/pad92/ansible-alpine)
+[![Docker Image Size](https://img.shields.io/docker/image-size/pad92/ansible-alpine/latest)](https://hub.docker.com/r/pad92/ansible-alpine/tags?name=latest)
+[![Docker Stars](https://img.shields.io/docker/stars/pad92/ansible-alpine)](https://hub.docker.com/r/pad92/ansible-alpine/)
+[![License](https://img.shields.io/gitlab/license/pad92/docker-ansible-alpine)](LICENSE)
+
 ## Usage
 
-### Environment variables
-
-| Variable             | Default Value    | Usage                                       |
-|----------------------|------------------|---------------------------------------------|
-| PIP_REQUIREMENTS     | requirements.txt | Install Python package requirements         |
-| ANSIBLE_REQUIREMENTS | requirements.yml | Install Ansible Galaxy requirements          |
-| DEPLOY_KEY           |                  | Provide an SSH private key to the container  |
-| CA_CERT_UPGRADE      |                  | Set to `true` to update ca-certificates      |
-
-### Mitogen
-
-To enable mitogen, add this configuration into defaults in ansible.cfg file (adjust the Python version path if using a custom Alpine base):
-
-```cfg
-[defaults]
-strategy_plugins = /usr/lib/python3.14/site-packages/ansible_mitogen/plugins/strategy
-strategy = mitogen_linear
-```
-
-Full documentation: https://mitogen.networkgenomics.com/ansible_detailed.html
-
-### Run Playbook
-
-```sh
-docker run -it --rm \
-  -v "${PWD}:/ansible" \
-  pad92/ansible-alpine:latest \
-  ansible-playbook -i inventory playbook.yml
-```
-
-### Generate Base Role structure
-
-```sh
-docker run -it --rm \
-  -v "${PWD}:/ansible" \
-  pad92/ansible-alpine:latest \
-  ansible-galaxy init role-name
-```
-
-### Lint Role
-
-```sh
-docker run -it --rm \
-  -v "${PWD}:/ansible" \
-  pad92/ansible-alpine:latest \
-  ansible-lint tests/playbook.yml
-```
-
-### Run with forwarding ssh agent
-
-```sh
-docker run -it --rm \
-  -v "$(readlink -f "$SSH_AUTH_SOCK"):/ssh-agent" \
-  -v "${PWD}:/ansible" \
-  -e SSH_AUTH_SOCK=/ssh-agent \
-  pad92/ansible-alpine:latest \
-  sh
-```
-
-### Add custom CA certificates
-
-```sh
-docker run -it --rm \
-  -v "$(readlink -f "$SSH_AUTH_SOCK"):/ssh-agent" \
-  -v "${PWD}:/ansible" \
-  -v "${PWD}/ca-certificates:/usr/local/share/ca-certificates" \
-  -e SSH_AUTH_SOCK=/ssh-agent \
-  pad92/ansible-alpine:latest sh
-```
-
+The [Ansible image guide](docs/ansible.md) covers container usage, configuration, and common commands.
 
 ## Local Development and Testing
 
 A `Makefile` is provided to build and run the test suite locally, matching the steps and variables configured in `.gitlab-ci.yml`.
+
+See the [CI guide](docs/ci.md) for every pipeline job, its trigger, and the
+matching Make target.
 
 ### Version control
 
@@ -162,7 +98,7 @@ make test-ci                # Script checks and simulated tests; no image build
 make check-ansible-release  # Report available Ansible updates
 make check-alpine-release   # Report available Alpine updates
 make check-trivy-release    # Report available Trivy updates
-make check-updates          # Run both update checks
+make check-updates          # Check Ansible, Alpine, and Trivy updates
 make scan-published        # Scan the published latest digest on AMD64 and ARM64
 ```
 

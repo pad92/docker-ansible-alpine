@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scan HIGH and CRITICAL findings together, keeping vulnerability and secret checks blocking.
 
 ### Documentation
+- Document GitLab CI jobs, pipeline flows, and their Makefile equivalents.
+- Move Ansible image usage, configuration, and common commands into a dedicated guide.
 - Document the upstream missing-CVE-details warning, reproduced with a freshly downloaded database.
 
 ## [2026-10-09]
