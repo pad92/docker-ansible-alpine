@@ -7,6 +7,13 @@ default:
   tags:
     - chataigne
 
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - when: always
+
 variables:
   MANUAL_ANSIBLE_VERSION:
     value: "13.7.0"
@@ -39,6 +46,17 @@ check_ansible_release:
     - apk add --no-cache coreutils curl jq
   script:
     - ./ci/check-ansible-release.sh
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+check_trivy_release:
+  stage: automation
+  services: []
+  resource_group: trivy-release-check
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - sh ci/check-trivy-release.sh
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
 

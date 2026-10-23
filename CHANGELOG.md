@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Make local upstream checks work without GitLab CI variables or a token; scheduled CI checks still create update merge requests.
 
 ### Added
+- Check upstream Trivy releases and update the pinned scanner digest through a merge request.
+- Avoid duplicate branch pipelines when a merge request pipeline exists.
 - Expose CI validation, upstream update checks, published-image scans, and the guarded CI release command through Makefile targets.
 - Check Alpine patch versions and digest changes on scheduled pipelines and open update merge requests.
 - Scan the published image on AMD64 and ARM64 during scheduled pipelines.

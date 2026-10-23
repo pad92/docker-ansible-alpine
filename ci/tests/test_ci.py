@@ -50,6 +50,7 @@ class ScriptsTest(unittest.TestCase):
                     "CHANGELOG.md",
                     "Dockerfile",
                     ".gitlab-ci.yml",
+                    "Makefile",
                 )
             },
         }
@@ -81,6 +82,15 @@ class ScriptsTest(unittest.TestCase):
             "ARG ALPINE_IMAGE=alpine:3.24.3@" + OLD + "\nFROM ${ALPINE_IMAGE}\n"
         )
         self.state["files"][".gitlab-ci.yml"] = "image: alpine:3.24.3@" + OLD + "\n"
+        trivy_digest = "sha256:" + "7" * 64
+        trivy_image = "aquasec/trivy:0.76.1@" + trivy_digest
+        self.work.joinpath("Makefile").write_text(
+            "TRIVY_IMAGE ?= " + trivy_image + "\n"
+        )
+        self.state["files"]["Makefile"] = "TRIVY_IMAGE ?= " + trivy_image + "\n"
+        self.state["files"][".gitlab-ci.yml"] += "name: " + trivy_image + "\n"
+        self.state["tags"]["aquasec/trivy:0.76.1"] = trivy_digest
+        self.state["tags"]["aquasec/trivy:0.76.2"] = NEW
         validation = self.work / "validation"
         validation.mkdir()
         for name in ("ansible", "mitogen", "trivy-amd64", "trivy-arm64"):
@@ -178,6 +188,32 @@ class ScriptsTest(unittest.TestCase):
                 for arch in ("amd64", "arm64")
             ]
         }
+
+    def test_trivy_new_release_updates_makefile_and_ci_pin(self) -> None:
+        self.run_script("check-trivy-release.sh")
+        for name in ("Makefile", ".gitlab-ci.yml"):
+            self.assertIn("aquasec/trivy:0.76.2@" + NEW, self.state["files"][name])
+        commit = next(
+            w
+            for w in self.state["api_writes"]
+            if w["url"].endswith("/repository/commits")
+        )
+        payload = json.loads(commit["args"][commit["args"].index("--data") + 1])
+        self.assertEqual(len(payload["actions"]), 3)
+
+    def test_trivy_up_to_date_check_is_noop(self) -> None:
+        self.state["trivy_latest"] = "v0.76.1"
+        self.state["tags"]["aquasec/trivy:0.76.1"] = "sha256:" + "7" * 64
+        result = self.run_script("check-trivy-release.sh", args=("--check",))
+        self.assertIn("Trivy 0.76.1 is already configured", result.stdout)
+        self.assertFalse(self.state.get("api_writes"))
+
+    def test_trivy_digest_change_opens_update(self) -> None:
+        self.state["trivy_latest"] = "v0.76.1"
+        self.state["tags"]["aquasec/trivy:0.76.1"] = NEW
+        self.run_script("check-trivy-release.sh", args=("--check",))
+        result = self.run_script("check-trivy-release.sh", args=("--check",))
+        self.assertIn("aquasec/trivy:0.76.1@" + NEW, result.stdout)
 
     def test_alpine_patch_updates_all_pins_in_one_mr(self) -> None:
         self.alpine()
@@ -288,6 +324,14 @@ class PipelineConfigurationTest(unittest.TestCase):
         )
         self.assertIn("TESTED_IMAGE", "\n".join(config["build_image"]["script"][1:]))
         self.assertEqual(config["scan_published"]["needs"], ["resolve_published"])
+        self.assertEqual(config["default"]["tags"], ["chataigne"])
+        workflow_rules = config["workflow"]["rules"]
+        self.assertEqual(
+            workflow_rules[0]["if"], '$CI_PIPELINE_SOURCE == "merge_request_event"'
+        )
+        self.assertEqual(workflow_rules[1]["when"], "never")
+        self.assertIn("CI_OPEN_MERGE_REQUESTS", workflow_rules[1]["if"])
+        self.assertIn("check_trivy_release", config)
         self.assertEqual(
             config["test_trivy"]["parallel"]["matrix"][0]["SCAN_PLATFORM"],
             ["linux/amd64", "linux/arm64"],
@@ -321,6 +365,7 @@ class MakefileTest(unittest.TestCase):
         output = self.dry_run("check-updates")
         self.assertIn("sh ci/check-ansible-release.sh", output)
         self.assertIn("sh ci/check-alpine-release.sh", output)
+        self.assertIn("sh ci/check-trivy-release.sh", output)
         output = self.dry_run("test-ci")
         self.assertIn("unittest discover", output)
         self.assertNotIn("docker run", output)

@@ -94,6 +94,8 @@ elif command == "curl":
         print(state["files"][name])
     elif url.endswith("/merge_requests"):
         print(json.dumps([{"iid": 1}] if state.get("open_mr") else []))
+    elif url == "https://api.github.com/repos/aquasecurity/trivy/releases/latest":
+        print(json.dumps({"tag_name": state.get("trivy_latest", "v0.76.2")}))
     elif url == "https://pypi.org/pypi/ansible/json":
         print(json.dumps({"info": {"version": state.get("ansible_latest", "14.6.0")}}))
     elif url.startswith("https://pypi.org/pypi/ansible/"):

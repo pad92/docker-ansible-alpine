@@ -81,6 +81,40 @@ case "$update_kind" in
             sed "s/^ANSIBLE_CORE_VERSION=.*/ANSIBLE_CORE_VERSION=${ansible_core}/")
         change_note="Upgrade Ansible to ${latest_ansible} with ansible-core ${ansible_core}."
         ;;
+    trivy)
+        current_trivy=$(sed -n 's/^TRIVY_IMAGE[[:space:]]*?*=[[:space:]]*//p' Makefile | head -n 1)
+        current_version=$(printf '%s' "$current_trivy" | sed -n 's|^aquasec/trivy:\([0-9]*\.[0-9]*\.[0-9]*\)@sha256:[a-f0-9]*$|\1|p')
+        current_digest=$(printf '%s' "$current_trivy" | sed -n 's|^aquasec/trivy:[0-9]*\.[0-9]*\.[0-9]*@\(sha256:[a-f0-9]*\)$|\1|p')
+        [ -n "$current_version" ] && [ -n "$current_digest" ] || {
+            echo "Expected a versioned and digest-pinned Trivy image in Makefile" >&2
+            exit 1
+        }
+        release=$(curl --fail --silent --show-error \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'User-Agent: docker-ansible-alpine-ci' \
+            https://api.github.com/repos/aquasecurity/trivy/releases/latest)
+        latest_trivy=$(printf '%s' "$release" | jq -er '.tag_name | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")) | ltrimstr("v")')
+        if sh ci/is-ansible-version-at-least.sh "$latest_trivy" "$current_version"; then
+            :
+        else
+            status=$?
+            [ "$status" -eq 1 ] || exit "$status"
+            echo "Configured Trivy ${current_version} is newer than GitHub ${latest_trivy}; no update created"
+            exit 0
+        fi
+        # shellcheck source=ci/registry.sh
+        . "$(dirname "$0")/registry.sh"
+        trivy_digest=$(registry_digest "aquasec/trivy:${latest_trivy}")
+        new_image="aquasec/trivy:${latest_trivy}@${trivy_digest}"
+        if [ "$new_image" = "$current_trivy" ]; then
+            echo "Trivy ${latest_trivy} is already configured"
+            exit 0
+        fi
+        branch="automation/trivy-${latest_trivy}-${trivy_digest#sha256:}"
+        updated_versions=$versions_content
+        commit_message="ci(trivy): update to ${latest_trivy}"
+        change_note="Update the Trivy scanner to ${new_image}."
+        ;;
     alpine)
         current_image=$(printf '%s\n' "$versions_content" | sed -n 's/^ALPINE_IMAGE=//p')
         current_version=$(printf '%s' "$current_image" | sed -n 's/^alpine:\([0-9]*\.[0-9]*\.[0-9]*\)@sha256:[a-f0-9]*$/\1/p')
@@ -198,6 +232,16 @@ if [ "$update_kind" = alpine ]; then
         file_content=$(curl --fail --silent --show-error --header "$auth_header" \
             "${api_url}/repository/files/${file}/raw?ref=${branch_encoded}")
         new_content=$(printf '%s\n' "$file_content" | sed -E "s|alpine:[0-9]+\\.[0-9]+(\\.[0-9]+)?@sha256:[a-f0-9]{64}|${new_image}|g")
+        if [ "$file_content" != "$new_content" ]; then
+            commit_payload=$(printf '%s' "$commit_payload" | jq --arg file "$file" --arg content "$new_content" \
+                '.actions += [{action: "update", file_path: $file, content: $content}]')
+        fi
+    done
+elif [ "$update_kind" = trivy ]; then
+    for file in Makefile .gitlab-ci.yml; do
+        file_content=$(curl --fail --silent --show-error --header "$auth_header" \
+            "${api_url}/repository/files/${file}/raw?ref=${branch_encoded}")
+        new_content=$(printf '%s\n' "$file_content" | sed -E "s|aquasec/trivy:[0-9]+\\.[0-9]+\\.[0-9]+@sha256:[a-f0-9]{64}|${new_image}|g")
         if [ "$file_content" != "$new_content" ]; then
             commit_payload=$(printf '%s' "$commit_payload" | jq --arg file "$file" --arg content "$new_content" \
                 '.actions += [{action: "update", file_path: $file, content: $content}]')

@@ -27,7 +27,7 @@ $(error Unable to calculate the build context hash; run this target from a Git c
 endif
 
 # Targets
-.PHONY: all help setup-buildx login check-versions build test test-ansible test-mitogen test-trivy test-ci check-ansible-release check-alpine-release check-updates scan-published release clean
+.PHONY: all help setup-buildx login check-versions build test test-ansible test-mitogen test-trivy test-ci check-ansible-release check-alpine-release check-trivy-release check-updates scan-published release clean
 
 .DEFAULT_GOAL := help
 
@@ -41,7 +41,8 @@ help:
 	@echo "  make test-ci        Validate CI scripts and run simulated release/update tests"
 	@echo "  make check-ansible-release  Check upstream Ansible against local versions.env"
 	@echo "  make check-alpine-release   Check upstream Alpine against local versions.env"
-	@echo "  make check-updates  Check both upstream versions (no GitLab token needed)"
+	@echo "  make check-trivy-release   Check the latest Trivy release and digest"
+	@echo "  make check-updates  Check Ansible, Alpine, and Trivy (no GitLab token needed)"
 	@echo "  make scan-published Scan the published latest digest on AMD64 and ARM64"
 	@echo "  make release        Publish the tested revision (GitLab release job only)"
 	@echo "  make clean          Remove the local builder and Trivy cache"
@@ -144,7 +145,10 @@ check-ansible-release:
 check-alpine-release:
 	sh ci/check-alpine-release.sh --check
 
-check-updates: check-ansible-release check-alpine-release
+check-trivy-release:
+	sh ci/check-trivy-release.sh --check
+
+check-updates: check-ansible-release check-alpine-release check-trivy-release
 
 # Resolve latest once so both platforms scan the same published image.
 scan-published: login

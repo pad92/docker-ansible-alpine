@@ -104,13 +104,17 @@ masked project variable named `GITLAB_API_TOKEN` with permission to read the
 repository, create branches and commits, and open merge requests through the
 GitLab API.
 
-The schedule checks PyPI for newer Ansible releases and Docker Hub for Alpine
-updates within the configured branch (for example, `3.24.x`). Alpine checks both
+The schedule checks PyPI for newer Ansible releases, GitHub and Docker Hub for
+Trivy, and Docker Hub for Alpine updates within the configured branch (for
+example, `3.24.x`). Alpine checks both
 the version and the multi-platform digest, including rebuilds of the same patch
 release. Each update opens a merge request with a changelog entry. Alpine updates
 keep `versions.env`, the Dockerfile default, and CI image references aligned.
 Existing update MRs are left for review; they are not merged automatically.
 A switch to another Alpine branch requires a separate change.
+
+When a branch already has an open MR, GitLab runs the MR pipeline and skips
+the duplicate branch push pipeline. This keeps each commit to one image build.
 
 The schedule also resolves the published GitLab `latest` tag to a digest and
 scans its AMD64 and ARM64 images for HIGH and CRITICAL findings. This detects
@@ -157,6 +161,7 @@ The Makefile exposes the same update and release scripts as GitLab:
 make test-ci                # Script checks and simulated tests; no image build
 make check-ansible-release  # Report available Ansible updates
 make check-alpine-release   # Report available Alpine updates
+make check-trivy-release    # Report available Trivy updates
 make check-updates          # Run both update checks
 make scan-published        # Scan the published latest digest on AMD64 and ARM64
 ```
