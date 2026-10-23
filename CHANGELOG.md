@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Make local upstream checks work without GitLab CI variables or a token; scheduled CI checks still create update merge requests.
+- Treat Docker's `not found` response as a missing tag when assigning image revisions.
 
 ### Added
 - Check upstream Trivy releases and update the pinned scanner digest through a merge request.

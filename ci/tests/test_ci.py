@@ -123,6 +123,15 @@ class ScriptsTest(unittest.TestCase):
                 self.assertEqual(self.state["tags"][registry + ":" + tag], DIGEST)
             self.assertNotIn(registry + ":14.5.0-2", self.state["tags"])
 
+    def test_registry_not_found_response_allocates_first_revision(self) -> None:
+        self.state["missing_manifest_error"] = (
+            "ERROR: docker.io/library/alpine:missing-tag: not found"
+        )
+        self.run_script("release-image.sh")
+        for registry in (REGISTRY, HUB):
+            self.assertEqual(self.state["tags"][registry + ":14.5.0-1"], DIGEST)
+            self.assertNotIn(registry + ":14.5.0-2", self.state["tags"])
+
     def test_security_revision_updates_latest_at_equal_ansible_version(self) -> None:
         for registry in (REGISTRY, HUB):
             for tag in ("14.5.0-1", "14.5.0", "latest"):
@@ -271,13 +280,19 @@ class ScriptsTest(unittest.TestCase):
         ):
             self.env.pop(name, None)
         before = (self.work / "versions.env").read_text()
-        for script in ("check-ansible-release.sh", "check-alpine-release.sh"):
+        for script in (
+            "check-ansible-release.sh",
+            "check-alpine-release.sh",
+            "check-trivy-release.sh",
+        ):
             with self.subTest(script=script):
                 result = self.run_script(script, args=("--check",))
-                self.assertIn(
-                    "Upgrade Ansible" if "ansible" in script else "Update Alpine",
-                    result.stdout,
-                )
+                expected = {
+                    "check-ansible-release.sh": "Upgrade Ansible",
+                    "check-alpine-release.sh": "Update Alpine",
+                    "check-trivy-release.sh": "Update the Trivy scanner",
+                }[script]
+                self.assertIn(expected, result.stdout)
         self.assertFalse(self.state.get("api_writes"))
         self.assertEqual((self.work / "versions.env").read_text(), before)
 

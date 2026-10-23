@@ -36,7 +36,7 @@ elif command == "docker":
         if "@" in ref:
             digest = ref.split("@")[1]
         if not digest:
-            fail("manifest unknown")
+            fail(state.get("missing_manifest_error", "manifest unknown"))
         if "--raw" in args:
             if ref.startswith("alpine@"):
                 print(json.dumps(state["alpine_index"]))

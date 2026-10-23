@@ -23,7 +23,7 @@ case "$mode" in
             "${api_url}/repository/files/versions.env/raw?ref=${base_ref}")
         ;;
     *)
-        echo "Usage: $0 [ansible|alpine] [--check|--create-mr]" >&2
+        echo "Usage: $0 [ansible|alpine|trivy] [--check|--create-mr]" >&2
         exit 2
         ;;
 esac
@@ -82,13 +82,13 @@ case "$update_kind" in
         change_note="Upgrade Ansible to ${latest_ansible} with ansible-core ${ansible_core}."
         ;;
     trivy)
-        current_trivy=$(sed -n 's/^TRIVY_IMAGE[[:space:]]*?*=[[:space:]]*//p' Makefile | head -n 1)
-        current_version=$(printf '%s' "$current_trivy" | sed -n 's|^aquasec/trivy:\([0-9]*\.[0-9]*\.[0-9]*\)@sha256:[a-f0-9]*$|\1|p')
-        current_digest=$(printf '%s' "$current_trivy" | sed -n 's|^aquasec/trivy:[0-9]*\.[0-9]*\.[0-9]*@\(sha256:[a-f0-9]*\)$|\1|p')
-        [ -n "$current_version" ] && [ -n "$current_digest" ] || {
+        current_trivy=$(awk '$1 == "TRIVY_IMAGE" && $2 == "?=" { print $3; exit }' Makefile)
+        if ! printf '%s\n' "$current_trivy" | grep -Eq '^aquasec/trivy:[0-9]+\.[0-9]+\.[0-9]+@sha256:[a-f0-9]{64}$'; then
             echo "Expected a versioned and digest-pinned Trivy image in Makefile" >&2
             exit 1
-        }
+        fi
+        current_version=${current_trivy#aquasec/trivy:}
+        current_version=${current_version%%@*}
         release=$(curl --fail --silent --show-error \
             --header 'Accept: application/vnd.github+json' \
             --header 'User-Agent: docker-ansible-alpine-ci' \
@@ -117,11 +117,12 @@ case "$update_kind" in
         ;;
     alpine)
         current_image=$(printf '%s\n' "$versions_content" | sed -n 's/^ALPINE_IMAGE=//p')
-        current_version=$(printf '%s' "$current_image" | sed -n 's/^alpine:\([0-9]*\.[0-9]*\.[0-9]*\)@sha256:[a-f0-9]*$/\1/p')
-        [ -n "$current_version" ] || {
+        if ! printf '%s\n' "$current_image" | grep -Eq '^alpine:[0-9]+\.[0-9]+\.[0-9]+@sha256:[a-f0-9]{64}$'; then
             echo "Expected a pinned Alpine patch version" >&2
             exit 1
-        }
+        fi
+        current_version=${current_image#alpine:}
+        current_version=${current_version%%@*}
         alpine_series=${current_version%.*}
         # shellcheck source=ci/registry.sh
         . "$(dirname "$0")/registry.sh"
@@ -148,7 +149,7 @@ case "$update_kind" in
         change_note="Update Alpine to ${new_image}."
         ;;
     *)
-        echo "Usage: $0 [ansible|alpine]" >&2
+        echo "Usage: $0 [ansible|alpine|trivy]" >&2
         exit 2
         ;;
 esac

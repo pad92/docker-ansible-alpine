@@ -7,7 +7,7 @@ registry_digest() {
             return 2
         }
         printf '%s\n' "$registry_result"
-    elif printf '%s\n' "$registry_result" | grep -Eqi 'manifest unknown|no such manifest'; then
+    elif printf '%s\n' "$registry_result" | grep -Eqi 'manifest unknown|no such manifest|: not found$'; then
         return 1
     else
         printf '%s\n' "$registry_result" >&2
