@@ -1,4 +1,4 @@
-ARG ALPINE_IMAGE=alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+ARG ALPINE_IMAGE=alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
 FROM ${ALPINE_IMAGE}
 
 # Metadata params
@@ -7,6 +7,7 @@ ARG ANSIBLE_VERSION
 ARG ANSIBLE_CORE_VERSION
 ARG ANSIBLE_LINT_VERSION
 ARG MITOGEN_VERSION
+ARG BUILD_PIPELINE_ID
 ARG BUILD_VCSREF
 
 # Metadata
@@ -16,6 +17,7 @@ LABEL org.opencontainers.image.authors="Pascal A. <pascalito@gmail.com>" \
       org.opencontainers.image.source="https://gitlab.com/pad92/docker-ansible-alpine.git" \
       org.opencontainers.image.version=${ANSIBLE_VERSION} \
       org.opencontainers.image.revision=${BUILD_VCSREF} \
+      io.gitlab.ci.pipeline.id=${BUILD_PIPELINE_ID} \
       org.opencontainers.image.created=${BUILD_DATE} \
       org.opencontainers.image.title="docker-ansible-alpine" \
       org.opencontainers.image.description="Ansible on Alpine Docker image" \

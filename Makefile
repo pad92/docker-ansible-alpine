@@ -12,13 +12,22 @@ BUILD_CONTEXT_HASH := $(shell git ls-files -z | xargs -0 -r git hash-object 2>/d
 IMAGE_TAG          ?= $(if $(CI_COMMIT_SHA),$(CI_COMMIT_SHA),$(BUILD_CONTEXT_HASH))
 BUILD_VCSREF       ?= $(if $(CI_COMMIT_SHA),$(CI_COMMIT_SHA),$(BUILD_CONTEXT_HASH))
 BUILDER_STATE_FILE ?= $(CURDIR)/.buildx-builder-created
+TRIVY_IMAGE       ?= aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
+SCAN_PLATFORMS    ?= linux/amd64 linux/arm64
+PYTHON            ?= python3
+TRIVY_USERNAME    ?= $(CI_REGISTRY_USER)
+TRIVY_PASSWORD    ?= $(CI_JOB_TOKEN)
+
+# Pass API configuration to the shared update scripts without printing credentials.
+export CI_API_V4_URL CI_PROJECT_ID CI_DEFAULT_BRANCH GITLAB_API_TOKEN
+export CI_REGISTRY_IMAGE TRIVY_USERNAME TRIVY_PASSWORD
 
 ifeq ($(strip $(BUILD_CONTEXT_HASH)),)
 $(error Unable to calculate the build context hash; run this target from a Git checkout with sha256sum installed)
 endif
 
 # Targets
-.PHONY: all help setup-buildx login check-versions build test test-ansible test-mitogen test-trivy clean
+.PHONY: all help setup-buildx login check-versions build test test-ansible test-mitogen test-trivy test-ci check-ansible-release check-alpine-release check-updates scan-published release clean
 
 .DEFAULT_GOAL := help
 
@@ -29,6 +38,12 @@ help:
 	@echo "  make test-ansible   Check Ansible and Ansible-Lint"
 	@echo "  make test-mitogen   Check the Mitogen import"
 	@echo "  make test-trivy     Scan the image with Trivy"
+	@echo "  make test-ci        Validate CI scripts and run simulated release/update tests"
+	@echo "  make check-ansible-release  Check upstream Ansible against local versions.env"
+	@echo "  make check-alpine-release   Check upstream Alpine against local versions.env"
+	@echo "  make check-updates  Check both upstream versions (no GitLab token needed)"
+	@echo "  make scan-published Scan the published latest digest on AMD64 and ARM64"
+	@echo "  make release        Publish the tested revision (GitLab release job only)"
 	@echo "  make clean          Remove the local builder and Trivy cache"
 
 all: build test
@@ -90,7 +105,7 @@ build: check-versions setup-buildx login
 	fi
 
 # Tests
-test: test-ansible test-mitogen test-trivy
+test: test-ci test-ansible test-mitogen test-trivy
 
 test-ansible: build
 	@set -e; expected="$(ANSIBLE_VERSION)"; \
@@ -113,16 +128,45 @@ test-trivy: build
 		-v "/var/run/docker.sock:/var/run/docker.sock" \
 		-v "$(CURDIR)/trivy-cache:/root/.cache" \
 		-v "$(CURDIR)/trivy-secret.yaml:/trivy-secret.yaml:ro" \
-		aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa image \
-			--secret-config /trivy-secret.yaml --exit-code 1 --severity CRITICAL --no-progress "$(CI_REGISTRY_IMAGE):$(IMAGE_TAG)"
-	docker run --rm \
-		-e TRIVY_USERNAME="$(CI_REGISTRY_USER)" \
-		-e TRIVY_PASSWORD="$(CI_JOB_TOKEN)" \
-		-v "/var/run/docker.sock:/var/run/docker.sock" \
-		-v "$(CURDIR)/trivy-cache:/root/.cache" \
-		-v "$(CURDIR)/trivy-secret.yaml:/trivy-secret.yaml:ro" \
-		aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa image \
-			--secret-config /trivy-secret.yaml --exit-code 1 --severity HIGH --no-progress "$(CI_REGISTRY_IMAGE):$(IMAGE_TAG)"
+		"$(TRIVY_IMAGE)" image \
+			--secret-config /trivy-secret.yaml --exit-code 1 --severity HIGH,CRITICAL --no-progress "$(CI_REGISTRY_IMAGE):$(IMAGE_TAG)"
+
+# CI logic checks do not build images or contact registries.
+test-ci:
+	shellcheck -x ci/*.sh
+	$(PYTHON) -m unittest discover -s ci/tests -v
+	sh ci/test-ansible-version-at-least.sh
+
+# Local checks only report updates; CI scripts keep their MR creation mode.
+check-ansible-release:
+	sh ci/check-ansible-release.sh --check
+
+check-alpine-release:
+	sh ci/check-alpine-release.sh --check
+
+check-updates: check-ansible-release check-alpine-release
+
+# Resolve latest once so both platforms scan the same published image.
+scan-published: login
+	@mkdir -p "$(CURDIR)/trivy-cache"
+	@set -eu; . ci/registry.sh; \
+	digest="$$(registry_digest "$(CI_REGISTRY_IMAGE):latest")"; \
+	for platform in $(SCAN_PLATFORMS); do \
+		docker run --rm \
+			-e TRIVY_USERNAME -e TRIVY_PASSWORD \
+			-v "$(CURDIR)/trivy-cache:/root/.cache" \
+			-v "$(CURDIR)/trivy-secret.yaml:/trivy-secret.yaml:ro" \
+			"$(TRIVY_IMAGE)" image --image-src remote \
+				--secret-config /trivy-secret.yaml --exit-code 1 \
+				--severity HIGH,CRITICAL --no-progress --platform "$$platform" \
+				"$(CI_REGISTRY_IMAGE)@$$digest"; \
+	done
+
+# The CI resource_group provides the lock required by revision allocation.
+release:
+	@test "$(GITLAB_CI)" = "true" && test "$(CI_JOB_NAME)" = "release_master" || \
+		{ echo "Run release through the GitLab release_master job and its resource_group." >&2; exit 1; }
+	sh ci/release-image.sh
 
 # Cleanup local buildx configurations
 clean:
