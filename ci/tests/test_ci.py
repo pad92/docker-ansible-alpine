@@ -187,7 +187,7 @@ class ScriptsTest(unittest.TestCase):
         self.assertFalse(self.state.get("writes"))
 
     def alpine(self, version: str = "3.24.4", digest: str = NEW) -> None:
-        self.state["tags"]["alpine:3.24"] = digest
+        self.state["tags"]["alpine:3"] = digest
         self.state["alpine_index"] = {
             "manifests": [
                 {
@@ -256,16 +256,19 @@ class ScriptsTest(unittest.TestCase):
         self.run_script("check-alpine-release.sh")
         self.assertFalse(self.state.get("api_writes"))
 
-    def test_alpine_rejects_series_change_or_downgrade(self) -> None:
-        for version in ("3.25.0", "3.24.1"):
-            with self.subTest(version=version):
-                self.alpine(version)
-                self.run_script("check-alpine-release.sh", success=False)
-                self.assertFalse(self.state.get("api_writes"))
+    def test_alpine_accepts_newer_minor_and_rejects_downgrade(self) -> None:
+        self.alpine("3.25.0")
+        self.run_script("check-alpine-release.sh")
+        self.assertIn("alpine:3.25.0@" + NEW, self.state["files"]["versions.env"])
+
+        self.state["api_writes"] = []
+        self.alpine("3.24.1")
+        self.run_script("check-alpine-release.sh", success=False)
+        self.assertFalse(self.state.get("api_writes"))
 
     def test_alpine_registry_failure_does_not_create_mr(self) -> None:
         self.alpine()
-        self.state["errors"] = ["alpine:3.24"]
+        self.state["errors"] = ["alpine:3"]
         self.run_script("check-alpine-release.sh", success=False)
         self.assertFalse(self.state.get("api_writes"))
 

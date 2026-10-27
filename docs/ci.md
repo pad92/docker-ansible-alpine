@@ -57,7 +57,7 @@ tests or release jobs.
 | GitLab job | Runs when | What it does | Local Make equivalent |
 | --- | --- | --- | --- |
 | `check_ansible_release` | Schedule | Checks PyPI and opens an update MR when Ansible or its compatible `ansible-core` needs an update. | `make check-ansible-release` reports the update without changing GitLab. |
-| `check_alpine_release` | Schedule | Checks the configured Alpine branch for a newer patch or digest and opens an update MR. | `make check-alpine-release` reports the update. It also needs Docker Buildx. |
+| `check_alpine_release` | Schedule | Checks the latest Alpine 3.x tag for a newer patch or digest and opens an update MR. | `make check-alpine-release` reports the update. It also needs Docker Buildx. |
 | `check_trivy_release` | Schedule | Checks the latest Trivy release and image digest, then opens an update MR. | `make check-trivy-release` reports the update. It also needs Docker Buildx. |
 | `validate_ci` | Every source except schedule | Runs ShellCheck and the simulated CI/release tests. | `make test-ci` |
 | `build_image` | Regular push, merge request, tag, or other non-web, non-schedule pipeline | Builds and pushes a temporary multi-platform candidate, then exports its immutable digest as `TESTED_IMAGE`. | `make build` builds locally and loads the image into Docker. It does not create the CI candidate. |
@@ -114,8 +114,9 @@ The update jobs run independently:
 
 - Ansible is checked against PyPI. The script reads the compatible
   `ansible-core` requirement from the selected Ansible release.
-- Alpine is checked against the configured minor series, such as `3.24`. The
-  script compares both the patch version and the multi-platform image digest.
+- Alpine is checked against Docker Hub's `alpine:3` tag, so the job follows the
+  latest 3.x release. It compares both the patch version and the multi-platform
+  image digest.
 - Trivy is checked against the latest GitHub release and the matching Docker
   Hub image digest.
 
@@ -123,6 +124,8 @@ Each changed pin opens an MR with a changelog entry. The jobs do not merge
 those MRs. The Alpine updater keeps `versions.env`, the Dockerfile default, and
 the CI image references in sync. The Trivy updater changes the Makefile and CI
 image pin.
+
+The Alpine updater tracks the major `3` tag and rejects version downgrades.
 
 The scheduled scan resolves GitLab `latest` once, then scans the same digest on
 AMD64 and ARM64. It does not rebuild the image. A failed scan needs review even
