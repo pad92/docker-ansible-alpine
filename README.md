@@ -41,13 +41,12 @@ repository, create branches and commits, and open merge requests through the
 GitLab API.
 
 The schedule checks PyPI for newer Ansible releases, GitHub and Docker Hub for
-Trivy, and Docker Hub for Alpine updates within the configured branch (for
-example, `3.24.x`). Alpine checks both
-the version and the multi-platform digest, including rebuilds of the same patch
+Trivy, and Docker Hub for the latest Alpine 3.x image. Alpine checks both the
+version and the multi-platform digest, including rebuilds of the same patch
 release. Each update opens a merge request with a changelog entry. Alpine updates
 keep `versions.env`, the Dockerfile default, and CI image references aligned.
 Existing update MRs are left for review; they are not merged automatically.
-A switch to another Alpine branch requires a separate change.
+The updater tracks the major `3` tag and rejects version downgrades.
 
 When a branch already has an open MR, GitLab runs the MR pipeline and skips
 the duplicate branch push pipeline. This keeps each commit to one image build.

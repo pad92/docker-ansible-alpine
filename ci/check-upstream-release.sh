@@ -123,17 +123,16 @@ case "$update_kind" in
         fi
         current_version=${current_image#alpine:}
         current_version=${current_version%%@*}
-        alpine_series=${current_version%.*}
         # shellcheck source=ci/registry.sh
         . "$(dirname "$0")/registry.sh"
-        digest=$(registry_digest "alpine:${alpine_series}")
+        digest=$(registry_digest alpine:3)
         # Resolve the index by digest, not by the moving branch tag.
         index=$(docker buildx imagetools inspect "alpine@${digest}" --raw)
         latest_alpine=$(printf '%s' "$index" | jq -er '[.manifests[] | select(.platform.os == "linux") | .annotations["org.opencontainers.image.version"]] | unique | if length == 1 then .[0] else error("Inconsistent Alpine versions") end')
         case "$latest_alpine" in
-            "$alpine_series".*) ;;
+            3.*) ;;
             *)
-                echo "Alpine series changed unexpectedly" >&2
+                echo "Expected the latest Alpine 3.x release, got ${latest_alpine}" >&2
                 exit 1
                 ;;
         esac
